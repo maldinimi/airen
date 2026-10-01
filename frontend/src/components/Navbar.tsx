@@ -36,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentUser, activeRole, theme, 
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-sky-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xs print:hidden transition-colors">
+    <header className="sticky top-0 z-40 w-full border-b border-sky-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xs transition-colors">
       <div className="w-full min-w-0 px-2 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: App Identity (Pojok Kiri Atas) */}
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">

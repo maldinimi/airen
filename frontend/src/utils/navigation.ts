@@ -4,7 +4,6 @@ export function toStandardMenuKey(menuKey: ActiveMenuKey | string): StandardMenu
   switch (menuKey) {
     case "menu_users":
     case "admin_users":
-    case "admin_add_user":
       return "menu_users";
     case "menu_acuan":
     case "admin_regulations":

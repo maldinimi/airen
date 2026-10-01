@@ -4,12 +4,10 @@ import { INITIAL_MASTER_CRITERIA } from "../data/defaultCriteria";
 import {
   CheckCircle2,
   XCircle,
-  Printer,
   Eye,
   ShieldCheck,
   Award,
   Save,
-  QrCode,
   Search,
   FileSpreadsheet,
   AlertTriangle,
@@ -28,13 +26,20 @@ import {
   Clock,
 } from "lucide-react";
 import { PdfPreviewModal } from "./PdfPreviewModal";
-import { PrintableReport } from "./PrintableReport";
 import { VerificationCriteriaTable } from "./VerificationCriteriaTable";
+import { formatIndonesianDateTime } from "../utils/formatUtils";
 
 interface VerifikatorViewProps {
   currentUser: UserAccount;
   onUpdateSubmission: (updated: SubmissionData) => void;
   reviewDetailSnapshot?: SubmissionData;
+  showFinalDecision?: boolean;
+  allowHistoricalStatusEdit?: boolean;
+  onHistoricalReviewChange?: (review: {
+    verificationStatus: "Diterima" | "Ditolak" | "Menunggu";
+    verifikatorNotes: string;
+    criteriaResults: ChecklistCriterion[];
+  }) => void;
   activeMenu?: ActiveMenuKey;
   permission?: AccessPermission;
   regulations?: RegulationDocument[];
@@ -44,6 +49,9 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
   currentUser,
   onUpdateSubmission,
   reviewDetailSnapshot,
+  showFinalDecision = true,
+  allowHistoricalStatusEdit = false,
+  onHistoricalReviewChange,
   activeMenu = "menu_checklist",
   permission = "E",
   regulations = [],
@@ -51,19 +59,26 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
   const isEditable = permission === "E";
 
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Section Minimize States
   const [isUnifiedSectionCollapsed, setIsUnifiedSectionCollapsed] = useState(false);
-  const [isDecisionCollapsed, setIsDecisionCollapsed] = useState(false);
 
   const selectedSubmission = reviewDetailSnapshot || null;
+  const isCombinedReviewDetail = Boolean(reviewDetailSnapshot && showFinalDecision);
+  const isHistoricalReviewLocked = Boolean(
+    allowHistoricalStatusEdit &&
+      selectedSubmission &&
+      selectedSubmission.verificationStatus.trim().toLowerCase() !== "menunggu",
+  );
+  const canEditHistoricalReview = allowHistoricalStatusEdit && !isHistoricalReviewLocked;
+  const canEditDecision = isEditable || canEditHistoricalReview;
 
   // Verifier Inputs for current selected item
   const [currentDecision, setCurrentDecision] = useState<"Diterima" | "Ditolak" | "Menunggu">(selectedSubmission?.verificationStatus || "Menunggu");
   const [currentNotes, setCurrentNotes] = useState<string>(selectedSubmission?.verifikatorNotes || "");
   const [editableCriteria, setEditableCriteria] = useState<ChecklistCriterion[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [criteriaSaveSuccess, setCriteriaSaveSuccess] = useState(false);
 
   // Sync state when selected submission changes
   useEffect(() => {
@@ -83,17 +98,34 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
   }, [selectedSubmission]);
 
   const handleRowStatusChange = (criterionId: number, newStatus: "Lolos" | "Ditolak") => {
-    setEditableCriteria((prev) => prev.map((item) => (item.id === criterionId ? { ...item, verifierStatus: newStatus } : item)));
+    if (isHistoricalReviewLocked) return;
+    const updatedCriteria = editableCriteria.map((item) => (item.id === criterionId ? { ...item, verifierStatus: newStatus } : item));
+    setEditableCriteria(updatedCriteria);
+    setCriteriaSaveSuccess(false);
   };
 
   const handleRowNotesChange = (criterionId: number, notes: string) => {
-    setEditableCriteria((prev) => prev.map((item) => (item.id === criterionId ? { ...item, verifierNotes: notes } : item)));
+    if (isHistoricalReviewLocked) return;
+    const updatedCriteria = editableCriteria.map((item) => (item.id === criterionId ? { ...item, verifierNotes: notes } : item));
+    setEditableCriteria(updatedCriteria);
+    setCriteriaSaveSuccess(false);
+  };
+
+  const handleSaveHistoricalReview = () => {
+    if (!selectedSubmission || !canEditHistoricalReview || !onHistoricalReviewChange) return;
+
+    onHistoricalReviewChange({
+      verificationStatus: currentDecision,
+      verifikatorNotes: currentNotes,
+      criteriaResults: editableCriteria.map((criterion) => ({ ...criterion })),
+    });
+    setCriteriaSaveSuccess(true);
   };
 
   const handleSaveDecision = () => {
     if (!selectedSubmission) return;
 
-    const verifiedAt = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WIB";
+    const verifiedAt = formatIndonesianDateTime();
     const previousHistory: VerificationHistoryEntry[] = selectedSubmission.reviewHistory?.length
       ? selectedSubmission.reviewHistory
       : selectedSubmission.verifiedAt && selectedSubmission.verificationStatus !== "Menunggu"
@@ -114,6 +146,7 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
     const reviewSnapshot: VerificationHistoryEntry = {
       verifiedAt,
       verificationStatus: currentDecision === "Menunggu" ? "Ditolak" : currentDecision,
+      rabFileName: selectedSubmission.rabFileName,
       verifiedBy: currentUser.name,
       verifiedByNip: currentUser.id,
       verifikatorNotes: currentNotes,
@@ -135,7 +168,6 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
       reviewHistory: currentDecision === "Menunggu"
         ? previousHistory
         : [...previousHistory, { ...reviewSnapshot, verificationStatus: currentDecision }],
-      digitalSignatureHash: selectedSubmission.digitalSignatureHash || `DIGISIG-KOMDIGI-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
     };
 
     onUpdateSubmission(updated);
@@ -366,13 +398,13 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
 
                   {/* Submission Details Full Width */}
                   {selectedSubmission && (
-                    <div className="space-y-8 sm:space-y-10">
+                    <div className={isCombinedReviewDetail ? "space-y-0" : "space-y-8 sm:space-y-10"}>
                       {/* ============================================================= */}
                       {/* INSTRUKSI KHUSUS: PEMBAHASAN 1 & PEMBAHASAN 2 DISATUKAN        */}
                       {/* "Pembahasan 1 Parameter Hierarki & satker dan pembahasan 2     */}
                       {/*  Evaluasi AI & Verifikator 20 kriteria agar disatukan"         */}
                       {/* ============================================================= */}
-                      <div className="relative bg-white dark:bg-slate-900 border-2 border-blue-500 dark:border-blue-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm transition-all space-y-6 sm:space-y-7">
+                      <div className={`relative bg-white dark:bg-slate-900 border-2 border-blue-500 dark:border-blue-500 ${isCombinedReviewDetail ? "rounded-t-2xl border-b-0 p-6 sm:p-8 pt-8 sm:pt-9 pb-0 sm:pb-0" : "rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9"} shadow-sm transition-all space-y-6 sm:space-y-7`}>
                         {/* Outline Label Badge Terpadu */}
                         <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-blue-600 text-white border-blue-400 select-none">
                           <Sparkles className="w-3.5 h-3.5" />
@@ -501,9 +533,19 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                                 )}
                               </div>
 
+                              {allowHistoricalStatusEdit && editableCriteria.length === 0 && (
+                                <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2" role="status">
+                                  Rincian evaluasi baris per baris belum tersimpan pada entri histori ini.
+                                </p>
+                              )}
+
                               <VerificationCriteriaTable
                                 criteria={editableCriteria}
                                 isEditable={isEditable}
+                                isStatusEditable={isEditable || allowHistoricalStatusEdit}
+                                isNotesEditable={isEditable || allowHistoricalStatusEdit}
+                                isStatusDisabled={isHistoricalReviewLocked}
+                                isNotesDisabled={isHistoricalReviewLocked}
                                 onStatusChange={handleRowStatusChange}
                                 onNotesChange={handleRowNotesChange}
                               />
@@ -513,21 +555,24 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                       </div>
 
                       {/* FORMULIR KEPUTUSAN AKHIR & LAPORAN BERITA ACARA */}
-                      <div
-                        id="formulir-keputusan-verifikator"
-                        className="relative bg-white dark:bg-slate-900 border-2 border-emerald-500 dark:border-emerald-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm space-y-6 sm:space-y-7 transition-all"
-                      >
+                      {showFinalDecision && (
+                        <div
+                          id="formulir-keputusan-verifikator"
+                          className={`relative bg-white dark:bg-slate-900 ${isCombinedReviewDetail ? "border-x-2 border-b-2 border-blue-500 dark:border-blue-500 rounded-b-2xl pt-0" : "border-2 border-emerald-500 dark:border-emerald-500 rounded-2xl pt-8 sm:pt-9"} p-6 sm:p-8 shadow-sm space-y-6 sm:space-y-7 transition-all`}
+                        >
                         {/* Outline Label Badge */}
-                        <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-emerald-600 text-white border-emerald-400 select-none">
-                          <Award className="w-3.5 h-3.5" />
-                          <span>KEPUTUSAN AKHIR &bull; BERITA ACARA DIGITAL</span>
-                        </div>
+                        {!isCombinedReviewDetail && (
+                          <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-emerald-600 text-white border-emerald-400 select-none">
+                            <Award className="w-3.5 h-3.5" />
+                            <span>KEPUTUSAN AKHIR &bull; BERITA ACARA DIGITAL</span>
+                          </div>
+                        )}
 
-                        <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className={`border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isCombinedReviewDetail ? "border-t pt-6" : ""}`}>
                           <div>
                             <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                               <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                              <span>Keputusan Akhir Verifikasi &amp; Laporan Berita Acara Digital</span>
+                              <span>Keputusan Akhir Verifikasi</span>
                             </h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tetapkan keputusan akhir berkas RAB secara komprehensif berdasarkan penelaahan 20 kriteria di atas.</p>
                           </div>
@@ -538,67 +583,76 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                                 Keputusan Tersimpan!
                               </span>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => setIsDecisionCollapsed(!isDecisionCollapsed)}
-                              className="h-8 px-3 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold"
-                              title={isDecisionCollapsed ? "Perluas Keputusan" : "Minimize Keputusan"}
-                            >
-                              <span>{isDecisionCollapsed ? "Perluas" : "Minimize"}</span>
-                              {isDecisionCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                            </button>
                           </div>
                         </div>
 
-                        {!isDecisionCollapsed && (
-                          <div className="space-y-6 animate-fadeIn">
+                        <div className="space-y-6 animate-fadeIn">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 p-5 sm:p-6 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl">
                               {/* Kolom 1: Pilihan Diterima atau Ditolak (5 cols) */}
                               <div className="md:col-span-5 space-y-2.5">
                                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                                   Kolom 1: Keputusan Akhir <span className="text-rose-500">*</span>
                                 </label>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih status penetapan akhir dokumen usulan RAB:</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  {canEditDecision ? "Pilih status penetapan akhir dokumen usulan RAB:" : "Status keputusan akhir:"}
+                                </p>
 
-                                <div className="grid grid-cols-2 gap-3 pt-1">
-                                  <button
-                                    id="btn-verif-diterima"
-                                    type="button"
-                                    disabled={!isEditable}
-                                    onClick={() => isEditable && setCurrentDecision("Diterima")}
-                                    className={`h-12 px-4 rounded-xl border text-center transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider ${
-                                      !isEditable ? "cursor-not-allowed opacity-80" : "cursor-pointer"
-                                    } ${
+                                {canEditDecision ? (
+                                  <>
+                                    <div className="grid grid-cols-2 gap-3 pt-1">
+                                      <button
+                                        id="btn-verif-diterima"
+                                        type="button"
+                                        onClick={() => {
+                                          setCurrentDecision("Diterima");
+                                          if (allowHistoricalStatusEdit) setCriteriaSaveSuccess(false);
+                                        }}
+                                        className={`h-12 px-4 rounded-xl border text-center transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider ${
+                                          currentDecision === "Diterima"
+                                            ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/30 ring-1 ring-emerald-500"
+                                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400 hover:bg-emerald-50/40"
+                                        }`}
+                                      >
+                                        <CheckCircle2 className="w-4 h-4 text-current" />
+                                        <span>Diterima</span>
+                                      </button>
+
+                                      <button
+                                        id="btn-verif-ditolak"
+                                        type="button"
+                                        onClick={() => {
+                                          setCurrentDecision("Ditolak");
+                                          if (allowHistoricalStatusEdit) setCriteriaSaveSuccess(false);
+                                        }}
+                                        className={`h-12 px-4 rounded-xl border text-center transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider ${
+                                          currentDecision === "Ditolak"
+                                            ? "bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/30 ring-1 ring-rose-500"
+                                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-rose-400 hover:bg-rose-50/40"
+                                        }`}
+                                      >
+                                        <XCircle className="w-4 h-4 text-current" />
+                                        <span>Ditolak</span>
+                                      </button>
+                                    </div>
+
+                                    <div className="text-[11px] font-medium pt-1 text-slate-600 dark:text-slate-400">
+                                      Status terpilih: <strong className="font-bold text-slate-900 dark:text-white uppercase">{currentDecision}</strong>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="pt-1">
+                                    <span className={`inline-flex items-center gap-2 text-sm font-bold ${
                                       currentDecision === "Diterima"
-                                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/30 ring-1 ring-emerald-500"
-                                        : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400 hover:bg-emerald-50/40"
-                                    }`}
-                                  >
-                                    <CheckCircle2 className="w-4 h-4 text-current" />
-                                    <span>Diterima</span>
-                                  </button>
-
-                                  <button
-                                    id="btn-verif-ditolak"
-                                    type="button"
-                                    disabled={!isEditable}
-                                    onClick={() => isEditable && setCurrentDecision("Ditolak")}
-                                    className={`h-12 px-4 rounded-xl border text-center transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider ${
-                                      !isEditable ? "cursor-not-allowed opacity-80" : "cursor-pointer"
-                                    } ${
-                                      currentDecision === "Ditolak"
-                                        ? "bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/30 ring-1 ring-rose-500"
-                                        : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-rose-400 hover:bg-rose-50/40"
-                                    }`}
-                                  >
-                                    <XCircle className="w-4 h-4 text-current" />
-                                    <span>Ditolak</span>
-                                  </button>
-                                </div>
-
-                                <div className="text-[11px] font-medium pt-1 text-slate-600 dark:text-slate-400">
-                                  Status terpilih: <strong className="font-bold text-slate-900 dark:text-white uppercase">{currentDecision}</strong>
-                                </div>
+                                        ? "text-emerald-700 dark:text-emerald-300"
+                                        : currentDecision === "Ditolak"
+                                          ? "text-rose-700 dark:text-rose-300"
+                                          : "text-amber-700 dark:text-amber-300"
+                                    }`}>
+                                      {currentDecision === "Diterima" ? <CheckCircle2 className="w-4 h-4" /> : currentDecision === "Ditolak" ? <XCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                                      {currentDecision}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Kolom 2: Catatan / Keterangan Berita Acara (7 cols) */}
@@ -606,18 +660,44 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                                   Kolom 2: Catatan / Keterangan Berita Acara <span className="text-rose-500">*</span>
                                 </label>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Uraikan dasar pertimbangan penetapan atau arahan revisi bagi SatKer:</p>
-                                <textarea
-                                  id="textarea-verifikator-keterangan"
-                                  rows={4}
-                                  readOnly={!isEditable}
-                                  value={currentNotes}
-                                  onChange={(e) => isEditable && setCurrentNotes(e.target.value)}
-                                  placeholder="Contoh: Dokumen RAB telah disetujui penuh dengan pemenuhan 20 kriteria kepatuhan SBM..."
-                                  className={`w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none leading-relaxed shadow-2xs ${
-                                    !isEditable ? "cursor-not-allowed bg-slate-50 dark:bg-slate-900" : ""
-                                  }`}
-                                />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  {canEditDecision ? "Uraikan dasar pertimbangan penetapan atau arahan revisi bagi SatKer:" : "Catatan / keterangan berita acara:"}
+                                </p>
+                                {canEditDecision ? (
+                                  <textarea
+                                    id="textarea-verifikator-keterangan"
+                                    rows={4}
+                                    value={currentNotes}
+                                    onChange={(e) => {
+                                      setCurrentNotes(e.target.value);
+                                      if (allowHistoricalStatusEdit) setCriteriaSaveSuccess(false);
+                                    }}
+                                    placeholder="Contoh: Dokumen RAB telah disetujui penuh dengan pemenuhan 20 kriteria kepatuhan SBM..."
+                                    className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-cyan-500 resize-none leading-relaxed shadow-2xs"
+                                  />
+                                ) : (
+                                  <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                    {currentNotes || "Tidak ada catatan berita acara."}
+                                  </p>
+                                )}
+                                {allowHistoricalStatusEdit && (
+                                  <div className="flex flex-wrap items-center justify-end gap-3">
+                                    {criteriaSaveSuccess && (
+                                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300" role="status">
+                                        Pembahasan tersimpan.
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveHistoricalReview}
+                                      disabled={isHistoricalReviewLocked}
+                                      className={`h-10 px-5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl inline-flex items-center gap-2 shadow-sm transition-colors ${isHistoricalReviewLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                    >
+                                      <Save className="w-4 h-4" />
+                                      <span>Simpan Verifikasi</span>
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -632,45 +712,16 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                                   <Save className="w-4 h-4" />
                                   <span>Simpan Keputusan &amp; Evaluasi Baris per Baris</span>
                                 </button>
-                              ) : (
+                              ) : !allowHistoricalStatusEdit ? (
                                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 italic">
                                   Mode View Only: Penetapan status keputusan telaah hanya dapat disimpan oleh Super Admin dan ROCAN (verif).
                                 </span>
-                              )}
+                              ) : null}
                             </div>
 
-                            {/* Cetak PDF Laporan Akhir Berita Acara Digital */}
-                            <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/90 dark:border-slate-700 rounded-2xl p-6 text-slate-900 dark:text-white shadow-xs flex flex-col sm:flex-row items-center justify-between gap-6 transition-colors">
-                              <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-2xs">
-                                  <QrCode className="w-8 h-8 text-cyan-600 dark:text-cyan-400" />
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs uppercase font-bold text-cyan-700 dark:text-cyan-400 tracking-wider">Tanda Tangan Digital Terverifikasi</span>
-                                    <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] rounded-full font-mono font-bold">
-                                      BSrE Valid
-                                    </span>
-                                  </div>
-                                  <h4 className="text-base font-bold text-slate-900 dark:text-white mt-1">Laporan Akhir Berita Acara Verifikasi Dokumen RAB</h4>
-                                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                                    Dokumen hasil pengesahan memuat evaluasi 20 kriteria baris per baris, QR Code verifikasi integritas, SHA-256 hash, serta NIP dan tanda tangan digital resmi.
-                                  </p>
-                                </div>
-                              </div>
-
-                              <button
-                                id="btn-cetak-laporan-akhir-verifikator"
-                                onClick={() => setIsPrintModalOpen(true)}
-                                className="h-11 px-5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md shadow-cyan-600/30 hover:shadow-lg transition-all shrink-0 cursor-pointer"
-                              >
-                                <Printer className="w-4 h-4" />
-                                <span>Cetak PDF Laporan Akhir Digital</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
@@ -1150,15 +1201,6 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
         />
       )}
 
-      {/* Printable Report Modal */}
-      {isPrintModalOpen && selectedSubmission && (
-        <PrintableReport
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
-          submission={selectedSubmission}
-          reportType="verified-report"
-        />
-      )}
     </div>
   );
 };

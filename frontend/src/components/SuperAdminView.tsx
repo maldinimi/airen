@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { UserAccount, UserRole, RegulationDocument, MenuAccessLevel, ActiveMenuKey, AccessPermission } from "../types";
+import { formatDateInputValue, formatFileSize } from "../utils/formatUtils";
 import {
   Users,
   UserPlus,
@@ -100,7 +101,6 @@ interface SuperAdminViewProps {
   activeMenu?: ActiveMenuKey;
   permission?: AccessPermission;
   onSelectMenu?: (menu: ActiveMenuKey) => void;
-  addUserModalTrigger?: number;
   onAddUser: (user: UserAccount) => void;
   onUpdateUser: (user: UserAccount) => void;
   onDeleteUser: (userId: string) => void;
@@ -117,7 +117,6 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   activeMenu = "admin_users",
   permission = "E",
   onSelectMenu,
-  addUserModalTrigger,
   onAddUser,
   onUpdateUser,
   onDeleteUser,
@@ -135,7 +134,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const [regSubTab, setRegSubTab] = useState<"ketentuan" | "acuan_ai" | "unggah_peraturan">((activeMenu as string) === "admin_add_regulation" ? "unggah_peraturan" : "acuan_ai");
 
   // Sub-view for Management User: "list" (Daftar Pengguna) vs "add" (Halaman Tambah Akun)
-  const [userSubView, setUserSubView] = useState<"list" | "add">((activeMenu as string) === "admin_add_user" ? "add" : "list");
+  const [userSubView, setUserSubView] = useState<"list" | "add">("list");
 
   // Search & Filters for Users
   const [searchTerm, setSearchTerm] = useState("");
@@ -180,7 +179,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const [regTitle, setRegTitle] = useState("");
   const [regCategory, setRegCategory] = useState("Standar Biaya Masukan (SBM)");
   const [regTargetYear, setRegTargetYear] = useState("2026");
-  const [regDateInserted, setRegDateInserted] = useState(new Date().toISOString().split("T")[0]);
+  const [regDateInserted, setRegDateInserted] = useState(formatDateInputValue());
   const [regDescription, setRegDescription] = useState("");
   const [regFileName, setRegFileName] = useState("");
   const [regFileSize, setRegFileSize] = useState("");
@@ -238,11 +237,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
   // Reset errors and edit state when activeMenu changes
   useEffect(() => {
-    if ((activeMenu as string) === "admin_add_user") {
-      setUserSubView("add");
-      setEditingUser(null);
-      setFormError(null);
-    } else if (activeMenu === "admin_users" || activeMenu === "menu_users") {
+    if (activeMenu === "admin_users" || activeMenu === "menu_users") {
       setUserSubView("list");
       setEditingUser(null);
       setFormError(null);
@@ -322,7 +317,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       activeRole: editingUser ? (formRoles.includes(editingUser.activeRole) ? editingUser.activeRole : formRoles[0]) : formRoles[0],
       password: formPassword || (editingUser ? editingUser.password : "password123"),
       isActive: formIsActive,
-      createdAt: editingUser ? editingUser.createdAt : new Date().toISOString().split("T")[0],
+      createdAt: editingUser ? editingUser.createdAt : formatDateInputValue(),
       menuAccess: formMenuAccess,
     };
 
@@ -370,7 +365,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     setRegTitle("");
     setRegCategory("Standar Biaya Masukan (SBM)");
     setRegTargetYear("2026");
-    setRegDateInserted(new Date().toISOString().split("T")[0]);
+    setRegDateInserted(formatDateInputValue());
     setRegDescription("");
     setRegFileName("");
     setRegFileSize("");
@@ -394,7 +389,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     setRegTitle(reg.title);
     setRegCategory(reg.category);
     setRegTargetYear(reg.targetYear || "2026");
-    setRegDateInserted(reg.dateInserted || reg.uploadDate || new Date().toISOString().split("T")[0]);
+    setRegDateInserted(reg.dateInserted || reg.uploadDate || formatDateInputValue());
     setRegDescription(reg.description || "");
     setRegFileName(reg.fileName);
     setRegFileSize(reg.fileSize);
@@ -414,7 +409,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     }
 
     setRegFileName(file.name);
-    setRegFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+    setRegFileSize(formatFileSize(file.size));
 
     if (!regTitle) {
       const autoTitle = file.name
@@ -471,8 +466,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         category: regCategory.trim(),
         fileName: regFileName,
         fileSize: regFileSize || "1.5 MB",
-        uploadDate: new Date().toISOString().split("T")[0],
-        dateInserted: regDateInserted || new Date().toISOString().split("T")[0],
+        uploadDate: formatDateInputValue(),
+        dateInserted: regDateInserted || formatDateInputValue(),
         uploadedBy: `${currentUser.id} (${currentUser.name})`,
         isActive: regIsActive,
         targetYear: regTargetYear.trim() || "2026",

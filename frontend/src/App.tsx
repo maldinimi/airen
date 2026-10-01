@@ -76,7 +76,6 @@ export default function App() {
 
   // Modals
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [addUserModalTrigger, setAddUserModalTrigger] = useState(0);
 
   useEffect(() => saveUsers(users), [users]);
   useEffect(() => saveMasterRoList(masterRoList), [masterRoList]);
@@ -233,10 +232,6 @@ export default function App() {
             setActiveMenu(menu);
             setIsMobileSidebarOpen(false);
           }}
-          onOpenAddUserModal={() => {
-            setActiveMenu("admin_add_user");
-            setAddUserModalTrigger((prev) => prev + 1);
-          }}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           isMobileOpen={isMobileSidebarOpen}
@@ -277,7 +272,6 @@ export default function App() {
                     activeMenu={activeMenu}
                     permission="E"
                     onSelectMenu={setActiveMenu}
-                    addUserModalTrigger={addUserModalTrigger}
                     onAddUser={handleAddUser}
                     onUpdateUser={handleUpdateUser}
                     onDeleteUser={handleDeleteUser}
@@ -353,7 +347,7 @@ export default function App() {
           </main>
 
           {/* Clean Minimalist Footer */}
-          <footer className="border-t border-sky-200/80 dark:border-slate-800/80 py-4 text-center text-xs text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xs print:hidden transition-colors">
+          <footer className="border-t border-sky-200/80 dark:border-slate-800/80 py-4 text-center text-xs text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xs transition-colors">
             Sistem Verifikasi &amp; Telaah Otomatis File RAB Berbasis AI &bull; Kementerian Komunikasi dan Digital Republik Indonesia &bull; 2026
           </footer>
         </div>

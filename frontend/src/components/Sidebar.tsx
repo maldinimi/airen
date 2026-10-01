@@ -4,9 +4,8 @@ import { UserRole, ActiveMenuKey, UserAccount, StandardMenuKey, ROLE_PERMISSIONS
 
 interface SidebarProps {
   activeRole: UserRole;
-  activeMenu: ActiveMenuKey | string;
-  onSelectMenu: (menu: ActiveMenuKey | any) => void;
-  onOpenAddUserModal?: () => void;
+  activeMenu: ActiveMenuKey;
+  onSelectMenu: (menu: ActiveMenuKey) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   isMobileOpen: boolean;
@@ -21,7 +20,7 @@ interface SidebarProps {
   };
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeRole, activeMenu, onSelectMenu, onOpenAddUserModal, isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile, currentUser, counts = {} }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeRole, activeMenu, onSelectMenu, isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile, currentUser, counts = {} }) => {
   const getRoleHeaderInfo = () => {
     switch (activeRole) {
       case "superadmin":
@@ -54,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeRole, activeMenu, onSele
   const roleInfo = getRoleHeaderInfo();
   const isSidebarCompact = isCollapsed && !isMobileOpen;
 
-  const isUsersActive = activeMenu === "menu_users" || activeMenu === "admin_users" || activeMenu === "admin_add_user";
+  const isUsersActive = activeMenu === "menu_users" || activeMenu === "admin_users";
   const isAcuanActive = activeMenu === "menu_acuan" || activeMenu === "admin_regulations" || (activeMenu as string) === "admin_add_regulation";
   const isMasterRoActive = activeMenu === "menu_master_ro" || (activeMenu as string) === "master_ro_list" || (activeMenu as string) === "master_ro_add";
   const isRabListActive = activeMenu === "menu_rab_list" || activeMenu === "satker_list" || activeMenu === "satker_form";

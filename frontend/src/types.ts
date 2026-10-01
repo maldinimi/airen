@@ -9,7 +9,6 @@ export type StandardMenuKey = "menu_users" | "menu_acuan" | "menu_checklist" | "
 export type ActiveMenuKey =
   | StandardMenuKey
   | "admin_users"
-  | "admin_add_user"
   | "admin_regulations"
   | "admin_add_regulation"
   | "satker_list"
@@ -95,6 +94,7 @@ export interface SubmissionAuditEntry {
 export interface VerificationHistoryEntry {
   verifiedAt: string;
   verificationStatus: "Menunggu" | "Diterima" | "Ditolak";
+  rabFileName?: string;
   verifiedBy?: string;
   verifiedByNip?: string;
   verifikatorNotes?: string;
@@ -154,5 +154,4 @@ export interface SubmissionData {
   verifiedByNip?: string;
   verifiedAt?: string;
   reviewHistory?: VerificationHistoryEntry[];
-  digitalSignatureHash?: string;
 }

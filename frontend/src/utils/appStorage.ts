@@ -91,7 +91,7 @@ export function loadSubmissions(): SubmissionData[] {
       if (submission.verificationStatus === "Menunggu" && reviewHistory.at(-1)?.verificationStatus !== "Menunggu") {
         return {
           ...submission,
-          reviewHistory: [...reviewHistory, { verifiedAt: submission.submittedAt, verificationStatus: "Menunggu" as const }],
+          reviewHistory: [...reviewHistory, { verifiedAt: submission.submittedAt, verificationStatus: "Menunggu" as const, rabFileName: submission.rabFileName }],
         };
       }
 

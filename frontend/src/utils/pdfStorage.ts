@@ -114,7 +114,6 @@ export interface FallbackPdfParams {
   aiStatus?: string;
   aiScore?: number;
   submittedAt?: string;
-  pagu?: string;
   prioritas?: string;
 }
 

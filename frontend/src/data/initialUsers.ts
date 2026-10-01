@@ -112,7 +112,6 @@ export const INITIAL_SUBMISSIONS: SubmissionData[] = [
       { verifiedAt: "24/09/2026 08:55 WIB", verificationStatus: "Ditolak" },
       { verifiedAt: "24/09/2026 09:15 WIB", verificationStatus: "Diterima" },
     ],
-    digitalSignatureHash: "DIGISIG-KOMDIGI-8A4F9C21",
   },
   {
     id: "SUB-2026-002",
@@ -166,7 +165,6 @@ export const INITIAL_SUBMISSIONS: SubmissionData[] = [
       { verifiedAt: "24/09/2026 10:05 WIB", verificationStatus: "Ditolak" },
       { verifiedAt: "24/09/2026 10:20 WIB", verificationStatus: "Diterima" },
     ],
-    digitalSignatureHash: "DIGISIG-KOMDIGI-3B9D1E77",
   },
   {
     id: "SUB-2026-003",
@@ -283,6 +281,5 @@ export const INITIAL_SUBMISSIONS: SubmissionData[] = [
       { verifiedAt: "24/09/2026 11:15 WIB", verificationStatus: "Ditolak" },
       { verifiedAt: "24/09/2026 11:30 WIB", verificationStatus: "Diterima" },
     ],
-    digitalSignatureHash: "DIGISIG-KOMDIGI-9F12A044",
   },
 ];

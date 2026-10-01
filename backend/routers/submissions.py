@@ -12,6 +12,31 @@ from services.gemini_checker import analyze_rab_document
 router = APIRouter()
 
 
+@router.post("/api/submissions/check-rab")
+async def check_rab(
+    rab_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    pdf_bytes = await rab_file.read()
+    active_regulation = db.query(Regulation).filter(Regulation.is_active == True).first()
+    regulation_bytes = None
+
+    if active_regulation and os.path.exists(active_regulation.file_path):
+        try:
+            with open(active_regulation.file_path, "rb") as source:
+                regulation_bytes = source.read()
+        except OSError:
+            pass
+
+    return analyze_rab_document(
+        pdf_bytes=pdf_bytes,
+        file_name=rab_file.filename or "dokumen-rab.pdf",
+        regulation_bytes=regulation_bytes,
+        regulation_text=active_regulation.extracted_text if active_regulation else None,
+        regulation_title=active_regulation.title if active_regulation else None,
+    )
+
+
 @router.post("/api/submissions/upload-and-check")
 async def submit_rab(
     program: str = Form(...),
@@ -93,6 +118,5 @@ def verify_submission(sub_id: str, payload: dict, db: Session = Depends(get_db))
     submission.verifikator_notes = payload.get("verifikatorNotes")
     submission.verified_by_id = payload.get("verifierId")
     submission.verified_at = datetime.now()
-    submission.digital_signature_hash = f"DIGISIG-KOMDIGI-{uuid.uuid4().hex[:8].upper()}"
     db.commit()
     return {"status": "success", "message": "Keputusan verifikasi berhasil disimpan"}

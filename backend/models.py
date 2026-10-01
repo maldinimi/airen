@@ -61,5 +61,4 @@ class Submission(Base):
     verifikator_notes = Column(Text, nullable=True)
     verified_by_id = Column(String(8), ForeignKey("users.id"), nullable=True)
     verified_at = Column(DateTime(timezone=True), nullable=True)
-    digital_signature_hash = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

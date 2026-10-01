@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UserAccount, UserRole, SubmissionData, ActiveMenuKey, RegulationDocument, VerificationHistoryEntry, ROLE_PERMISSIONS_MATRIX } from "../types";
+import { UserAccount, UserRole, SubmissionData, ActiveMenuKey, RegulationDocument, ChecklistCriterion, ROLE_PERMISSIONS_MATRIX } from "../types";
 import { getUniquePrograms, getKegiatansForProgram, getKrosForKegiatan, getRosForKro, HIERARCHY_DATA } from "../data/budgetData";
 import { runAiRabAnalysis } from "../data/defaultCriteria";
 import {
@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
-  Printer,
   ChevronDown,
   ChevronUp,
   Layers,
@@ -29,7 +28,6 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { PdfPreviewModal } from "./PdfPreviewModal";
-import { PrintableReport } from "./PrintableReport";
 import { inspectUploadedRabDocument } from "../utils/pdfInspector";
 import { VerifikatorView } from "./VerifikatorView";
 import { SubmissionTable } from "./SubmissionTable";
@@ -38,6 +36,7 @@ import { findRabCategory, RAB_CATEGORY_OPTIONS } from "../utils/rabCategories";
 import { filterSubmissions, getHistoricalSubmission, getReviewHistory } from "../utils/submissionUtils";
 import type { SubmissionFilters } from "../utils/submissionUtils";
 import { SubmissionFilterPanel } from "./SubmissionFilterPanel";
+import { formatFileSize, formatIndonesianDateTime } from "../utils/formatUtils";
 
 interface SatkerViewProps {
   currentUser: UserAccount;
@@ -50,6 +49,11 @@ interface SatkerViewProps {
   activeMenu?: ActiveMenuKey;
   onSelectMenu?: (menu: ActiveMenuKey) => void;
 }
+
+type RabAnalysisResult = Pick<SubmissionData, "aiStatus" | "aiScore" | "aiReason" | "aiRecommendation" | "criteriaResults"> & {
+  activeRegulationTitle?: string;
+  ticketNumber?: string;
+};
 
 const EMPTY_SUBMISSION_FILTERS: SubmissionFilters = {
   jenisDokumen: "",
@@ -73,7 +77,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   const activeRegulations = regulations.filter((r) => r.isActive);
   const isReadOnly = ROLE_PERMISSIONS_MATRIX.menu_rab_list[activeRole] !== "E";
   // Sub Tab state for Daftar RAB vs Form Pengajuan vs Detail Evaluasi & Reupload
-  const [activeRabSubTab, setActiveRabSubTab] = useState<"list" | "form" | "history" | "history_detail">(() => {
+  const [activeRabSubTab, setActiveRabSubTab] = useState<"list" | "form" | "history" | "history_detail" | "reupload">(() => {
     return activeMenu === "satker_form" ? "form" : "list";
   });
 
@@ -81,61 +85,266 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   // DETAIL EVALUASI AI 20 KRITERIA & REUPLOAD STATES
   // -------------------------------------------------------------
   const [reviewHistorySubmission, setReviewHistorySubmission] = useState<SubmissionData | null>(null);
-  const [reviewHistoryDetailEntry, setReviewHistoryDetailEntry] = useState<VerificationHistoryEntry | null>(null);
-  const [isHistoryInputMode, setIsHistoryInputMode] = useState(false);
+  const [reviewHistoryDetailIndex, setReviewHistoryDetailIndex] = useState<number | null>(null);
+  const [reuploadSubmission, setReuploadSubmission] = useState<SubmissionData | null>(null);
+  const [reuploadFile, setReuploadFile] = useState<File | null>(null);
+  const [reuploadError, setReuploadError] = useState<string | null>(null);
+  const [isReuploadAnalyzing, setIsReuploadAnalyzing] = useState(false);
+  const [reuploadProgressText, setReuploadProgressText] = useState("");
   const latestHistoryEntry = reviewHistorySubmission ? getReviewHistory(reviewHistorySubmission).at(-1) : undefined;
-  const canAccessVerificationInput = activeRole === "verifikator" || activeRole === "superadmin";
-  const canInputVerification = canAccessVerificationInput && latestHistoryEntry?.verificationStatus === "Ditolak";
-  const showInputVerification = canAccessVerificationInput && (latestHistoryEntry?.verificationStatus === "Ditolak" || latestHistoryEntry?.verificationStatus === "Menunggu");
-  const latestHistoricalReviewSubmission = reviewHistorySubmission && latestHistoryEntry
-    ? getHistoricalSubmission(reviewHistorySubmission, latestHistoryEntry)
+  const selectedReviewEntry = reviewHistorySubmission && reviewHistoryDetailIndex !== null
+    ? getReviewHistory(reviewHistorySubmission)[reviewHistoryDetailIndex] || null
     : null;
-  const historicalReviewSubmission = reviewHistorySubmission && reviewHistoryDetailEntry
-    ? getHistoricalSubmission(reviewHistorySubmission, reviewHistoryDetailEntry)
+  const historicalReviewSubmission = reviewHistorySubmission && selectedReviewEntry
+    ? getHistoricalSubmission(reviewHistorySubmission, selectedReviewEntry)
     : null;
 
   const handleOpenReviewHistory = (submission: SubmissionData) => {
     setReviewHistorySubmission(submission);
-    setReviewHistoryDetailEntry(null);
-    setIsHistoryInputMode(false);
+    setReviewHistoryDetailIndex(null);
     setActiveRabSubTab("history");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleOpenReviewHistoryDetail = (entry: VerificationHistoryEntry) => {
-    setReviewHistoryDetailEntry(entry);
-    setActiveRabSubTab("history_detail");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleOpenInputVerification = () => {
-    if (!canInputVerification || !latestHistoryEntry) return;
-    setReviewHistoryDetailEntry(latestHistoryEntry);
-    setIsHistoryInputMode(true);
+  const handleOpenReviewHistoryDetail = (index: number) => {
+    setReviewHistoryDetailIndex(index);
     setActiveRabSubTab("history_detail");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleBackToReviewHistory = () => {
-    setReviewHistoryDetailEntry(null);
-    setIsHistoryInputMode(false);
+    setReviewHistoryDetailIndex(null);
     setActiveRabSubTab("history");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleUpdateHistoryReview = (updatedSubmission: SubmissionData) => {
-    onUpdateSubmission?.(updatedSubmission);
-    setReviewHistorySubmission(updatedSubmission);
-    setReviewHistoryDetailEntry(updatedSubmission.reviewHistory?.at(-1) || null);
-  };
-
   const handleBackToDaftarRab = () => {
     setReviewHistorySubmission(null);
-    setReviewHistoryDetailEntry(null);
-    setIsHistoryInputMode(false);
+    setReviewHistoryDetailIndex(null);
     setActiveRabSubTab("list");
     onSelectMenu?.("satker_list");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleHistoricalReviewChange = (review: {
+    verificationStatus: "Diterima" | "Ditolak" | "Menunggu";
+    verifikatorNotes: string;
+    criteriaResults: ChecklistCriterion[];
+  }) => {
+    if (!reviewHistorySubmission || reviewHistoryDetailIndex === null || !onUpdateSubmission) return;
+
+    const history = getReviewHistory(reviewHistorySubmission);
+    if (!history[reviewHistoryDetailIndex]) return;
+    const criteriaResults = review.criteriaResults.map((criterion) => ({ ...criterion }));
+
+    const updatedHistory = history.map((entry, index) =>
+      index === reviewHistoryDetailIndex
+        ? {
+            ...entry,
+            verificationStatus: review.verificationStatus,
+            verifikatorNotes: review.verifikatorNotes,
+            criteriaResults,
+          }
+        : entry,
+    );
+    const updatedSubmission: SubmissionData = {
+      ...reviewHistorySubmission,
+      reviewHistory: updatedHistory,
+      ...(reviewHistoryDetailIndex === history.length - 1
+        ? {
+            verificationStatus: review.verificationStatus,
+            verifikatorNotes: review.verifikatorNotes,
+            criteriaResults,
+          }
+        : {}),
+    };
+
+    setReviewHistorySubmission(updatedSubmission);
+    onUpdateSubmission(updatedSubmission);
+    window.alert("Data verifikasi berhasil disimpan.");
+    handleBackToDaftarRab();
+  };
+
+  const handleOpenRabReupload = (submission: SubmissionData) => {
+    if ((activeRole !== "satker" && activeRole !== "superadmin") || getReviewHistory(submission).at(-1)?.verificationStatus !== "Ditolak") return;
+    setReuploadSubmission(submission);
+    setReuploadFile(null);
+    setReuploadError(null);
+    setActiveRabSubTab("reupload");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleReuploadFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.currentTarget.value = "";
+    if (!file) return;
+
+    const header = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    const isPdf = file.name.toLowerCase().endsWith(".pdf") && new TextDecoder().decode(header) === "%PDF-";
+    if (!isPdf) {
+      setReuploadFile(null);
+      setReuploadError("Berkas harus berupa PDF yang valid.");
+      return;
+    }
+
+    setReuploadFile(file);
+    setReuploadError(null);
+  };
+
+  const handleSaveRabReupload = async () => {
+    if (!reuploadSubmission || !reuploadFile || !onUpdateSubmission || isReuploadAnalyzing) return;
+
+    setIsReuploadAnalyzing(true);
+    setReuploadError(null);
+    setReuploadProgressText(`Mengirim "${reuploadFile.name}" untuk pemeriksaan AI (LLM)...`);
+
+    try {
+      const regulationLabel = activeRegulations.length > 0
+        ? activeRegulations.map((regulation) => regulation.title).join(" & ")
+        : "PMK Standar Biaya Masukan (SBM)";
+      let analysis: {
+        aiStatus: "LOLOS" | "TIDAK LOLOS";
+        aiScore: number;
+        aiReason: string;
+        aiRecommendation: string;
+        criteriaResults: ChecklistCriterion[];
+        activeRegulationTitle?: string;
+      } | null = null;
+
+      try {
+        const formData = new FormData();
+        formData.append("rab_file", reuploadFile);
+        const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
+        const response = await fetch(`${apiBaseUrl}/api/submissions/check-rab`, { method: "POST", body: formData });
+
+        if (response.ok) {
+          const data = await response.json();
+          let criteriaResults = data.criteriaResults;
+          if (typeof criteriaResults === "string") {
+            try {
+              criteriaResults = JSON.parse(criteriaResults);
+            } catch {
+              criteriaResults = null;
+            }
+          }
+          if (Array.isArray(criteriaResults) && criteriaResults.length > 0) {
+            analysis = {
+              aiStatus: data.aiStatus,
+              aiScore: data.aiScore,
+              aiReason: data.aiReason,
+              aiRecommendation: data.aiRecommendation,
+              criteriaResults,
+              activeRegulationTitle: data.activeRegulationTitle || regulationLabel,
+            };
+          }
+        }
+      } catch (error) {
+        console.info("Backend AI belum aktif, beralih ke inspeksi PDF langsung di browser.", error);
+      }
+
+      if (!analysis) {
+        setReuploadProgressText(`Memeriksa isi PDF "${reuploadFile.name}"...`);
+        try {
+          analysis = await inspectUploadedRabDocument(
+            reuploadFile,
+            reuploadFile.name,
+            formatFileSize(reuploadFile.size),
+            reuploadSubmission.program,
+            reuploadSubmission.kegiatan,
+            reuploadSubmission.kro,
+            reuploadSubmission.ro,
+            regulations,
+          );
+        } catch (error) {
+          console.warn("Inspeksi PDF gagal, menggunakan fallback analisis lokal.", error);
+          analysis = runAiRabAnalysis(
+            reuploadSubmission.program,
+            reuploadSubmission.kegiatan,
+            reuploadSubmission.kro,
+            reuploadSubmission.ro,
+            reuploadFile.name,
+            regulations,
+          );
+        }
+      }
+
+      if (!analysis) throw new Error("Hasil pemeriksaan AI tidak tersedia.");
+
+      let criteriaResults = Array.isArray(analysis.criteriaResults) ? analysis.criteriaResults : [];
+      if (criteriaResults.length === 0) {
+        const fallbackAnalysis = runAiRabAnalysis(
+          reuploadSubmission.program,
+          reuploadSubmission.kegiatan,
+          reuploadSubmission.kro,
+          reuploadSubmission.ro,
+          reuploadFile.name,
+          regulations,
+        );
+        analysis = fallbackAnalysis;
+        criteriaResults = fallbackAnalysis.criteriaResults;
+      }
+
+      setReuploadProgressText("Menyimpan hasil pemeriksaan dan mengirim RAB untuk reviu ulang...");
+      const nowFormatted = formatIndonesianDateTime();
+      const userLabel = `${currentUser.name} (${currentUser.id})`;
+      const pdfUrl = URL.createObjectURL(reuploadFile);
+      await storePdfBlob(reuploadSubmission.id, reuploadFile);
+      await storePdfBlob(reuploadSubmission.ticketNumber, reuploadFile);
+      await storePdfBlob(reuploadFile.name, reuploadFile);
+
+      const updatedSubmission: SubmissionData = {
+        ...reuploadSubmission,
+        rabFileName: reuploadFile.name,
+        rabFileSize: formatFileSize(reuploadFile.size),
+        pdfDataUrl: pdfUrl,
+        updatedBy: userLabel,
+        aiStatus: analysis.aiStatus,
+        aiScore: analysis.aiScore,
+        aiReason: analysis.aiReason,
+        aiRecommendation: analysis.aiRecommendation,
+        activeRegulationTitle: analysis.activeRegulationTitle || regulationLabel,
+        criteriaResults,
+        verificationStatus: "Menunggu",
+        verifikatorNotes: "",
+        verifiedBy: undefined,
+        verifiedByNip: undefined,
+        verifiedAt: undefined,
+        reviewHistory: [
+          ...getReviewHistory(reuploadSubmission),
+          {
+            verifiedAt: nowFormatted,
+            verificationStatus: "Menunggu",
+            rabFileName: reuploadFile.name,
+            aiStatus: analysis.aiStatus,
+            aiScore: analysis.aiScore,
+            aiReason: analysis.aiReason,
+            aiRecommendation: analysis.aiRecommendation,
+            criteriaResults,
+          },
+        ],
+        auditTrail: [
+          ...(reuploadSubmission.auditTrail || []),
+          {
+            action: "REUPLOAD",
+            performedBy: userLabel,
+            timestamp: nowFormatted,
+            details: `Unggah perbaikan dokumen RAB PDF: ${reuploadFile.name}`,
+          },
+        ],
+      };
+
+      onUpdateSubmission(updatedSubmission);
+      setReuploadSubmission(null);
+      setReuploadFile(null);
+      setActiveRabSubTab("list");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      console.error("Pemeriksaan atau penyimpanan reupload RAB gagal.", error);
+      setReuploadError("Pemeriksaan AI atau penyimpanan berkas gagal. Berkas belum dikirim untuk reviu ulang; silakan coba lagi.");
+    } finally {
+      setIsReuploadAnalyzing(false);
+      setReuploadProgressText("");
+    }
   };
 
   useEffect(() => {
@@ -175,11 +384,6 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   // Modals for Daftar RAB
   const [selectedDetailSubmission, setSelectedDetailSubmission] = useState<SubmissionData | null>(null);
   const [historyPreviewItem, setHistoryPreviewItem] = useState<SubmissionData | null>(null);
-  const [historyPrintItem, setHistoryPrintItem] = useState<{
-    submission: SubmissionData;
-    reportType: "ai-result" | "verified-report";
-  } | null>(null);
-
   // CRUD Modals: Edit & Delete & User Log History
   const [editItem, setEditItem] = useState<SubmissionData | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<SubmissionData | null>(null);
@@ -213,7 +417,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     if (!editItem) return;
 
     const userLabel = `${currentUser.name} (${currentUser.id})`;
-    const timeNow = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WIB";
+    const timeNow = formatIndonesianDateTime();
     const existingAudit = editItem.auditTrail || [];
 
     const updatedSub: SubmissionData = {
@@ -299,7 +503,6 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgressText, setAnalysisProgressText] = useState("");
   const [currentSubmission, setCurrentSubmission] = useState<SubmissionData | null>(null);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Post-submit Trigger State (Daftar Dokumen Acuan Terkait)
   const [showReferenceDocsTrigger, setShowReferenceDocsTrigger] = useState(false);
@@ -445,7 +648,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     await new Promise((r) => setTimeout(r, 550));
     setAnalysisProgressText(`Menghasilkan laporan telaah cerdas dokumen "${rabFileName}"...`);
 
-    let analysis: any = null;
+    let analysis: RabAnalysisResult | null = null;
 
     if (rabFile) {
       try {
@@ -499,7 +702,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
         analysis = await inspectUploadedRabDocument(
           rabFile,
           rabFileName,
-          rabFile ? `${(rabFile.size / (1024 * 1024)).toFixed(1)} MB` : "1.8 MB",
+          rabFile ? formatFileSize(rabFile.size) : "1.8 MB",
           selectedProgram,
           selectedKegiatan,
           selectedKro,
@@ -521,7 +724,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       }
     }
 
-    const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WIB";
+    const nowFormatted = formatIndonesianDateTime();
     const userLabel = `${currentUser.name} (${currentUser.id})`;
 
     // Generate related reference documents for post-submit trigger
@@ -548,7 +751,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       unitEselon2: currentUnitEselon2 || "Direktorat Informasi Publik",
       prioritas: currentPrioritas || "Prioritas Nasional",
       rabFileName: rabFileName,
-      rabFileSize: rabFile ? `${(rabFile.size / (1024 * 1024)).toFixed(1)} MB` : "1.8 MB",
+      rabFileSize: rabFile ? formatFileSize(rabFile.size) : "1.8 MB",
       pdfDataUrl: rabBlobUrl || rabDataUrl,
       activeRegulationTitle: analysis?.activeRegulationTitle || regLabel,
 
@@ -581,7 +784,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       criteriaResults: finalCriteria,
       verificationStatus: "Menunggu",
       verifikatorNotes: "",
-      reviewHistory: [{ verifiedAt: nowFormatted, verificationStatus: "Menunggu" }],
+      reviewHistory: [{ verifiedAt: nowFormatted, verificationStatus: "Menunggu", rabFileName }],
     };
 
     setCurrentSubmission(newSubmission);
@@ -601,9 +804,9 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       console.warn("Could not save to parent submission list:", e);
     }
 
-    setTimeout(() => {
-      document.getElementById("post-submit-reference-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 150);
+    window.alert("Data pengajuan RAB berhasil disimpan.");
+    onSelectMenu?.("satker_list");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -803,7 +1006,6 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                   onPreview={setHistoryPreviewItem}
                   onEdit={handleOpenEdit}
                   onDelete={setDeleteCandidate}
-                  onPrint={setHistoryPrintItem}
                 />
               </div>
             )}
@@ -846,16 +1048,15 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                 <History className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 Histori Reviu
               </div>
-              {showInputVerification && (
+              {(activeRole === "satker" || activeRole === "superadmin") && latestHistoryEntry?.verificationStatus === "Ditolak" && (
                 <button
                   type="button"
-                  disabled={!canInputVerification}
-                  onClick={handleOpenInputVerification}
-                  title={canInputVerification ? "Input verifikasi baru berdasarkan histori terakhir yang ditolak" : "Input verifikasi menunggu karena histori terakhir berstatus Menunggu"}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors border ${canInputVerification ? "bg-cyan-600 hover:bg-cyan-500 text-white border-cyan-500 cursor-pointer" : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed"}`}
+                  onClick={() => handleOpenRabReupload(reviewHistorySubmission)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white border border-amber-500 text-xs font-bold transition-colors cursor-pointer"
+                  title="Upload PDF perbaikan untuk reviu terakhir yang ditolak"
                 >
-                  <FileCheck className="w-4 h-4" />
-                  Input Verifikasi
+                  <Upload className="w-4 h-4" />
+                  Upload Perbaikan RAB
                 </button>
               )}
             </div>
@@ -888,7 +1089,9 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                         </td>
                       </tr>
                     ) : (
-                      getReviewHistory(reviewHistorySubmission).map((entry, index) => (
+                      getReviewHistory(reviewHistorySubmission).map((entry, index) => {
+                        const canVerify = (activeRole === "superadmin" || activeRole === "verifikator") && entry.verificationStatus.trim().toLowerCase() === "menunggu";
+                        return (
                         <tr key={`${entry.verifiedAt}-${index}`} className="hover:bg-sky-50/80 dark:hover:bg-slate-800/70 border-b border-slate-100 dark:border-slate-800/80 transition-colors">
                           <td className="px-4 py-4 text-center font-mono font-medium text-slate-400">{index + 1}</td>
                           <td className="px-4 py-4">
@@ -896,7 +1099,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                               <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 border border-rose-200 dark:border-rose-900 shrink-0">
                                 <FileSpreadsheet className="w-4 h-4" />
                               </div>
-                              <span className="font-bold text-slate-900 dark:text-white">{reviewHistorySubmission.rabFileName}</span>
+                              <span className="font-bold text-slate-900 dark:text-white">{entry.rabFileName || reviewHistorySubmission.rabFileName}</span>
                             </div>
                           </td>
                           <td className="px-4 py-4 text-xs text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">{entry.verifiedAt}</td>
@@ -909,16 +1112,17 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                           <td className="px-4 py-4 text-center">
                             <button
                               type="button"
-                              onClick={() => handleOpenReviewHistoryDetail(entry)}
+                              onClick={() => handleOpenReviewHistoryDetail(index)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold transition-colors cursor-pointer"
-                              title="Lihat rincian hasil verifikator pada reviu ini"
+                              title={canVerify ? "Verifikasi reviu ini" : "Lihat rincian hasil verifikator pada reviu ini"}
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              Detail
+                              {canVerify ? "Verifikasi" : "Detail"}
                             </button>
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -933,20 +1137,89 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              onClick={isHistoryInputMode ? () => setIsHistoryInputMode(false) : handleBackToReviewHistory}
+              onClick={handleBackToReviewHistory}
               className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer border border-slate-200 dark:border-slate-700"
             >
               <ArrowLeft className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-              <span>{isHistoryInputMode ? "Kembali ke Detail Histori" : "Kembali ke Histori Reviu"}</span>
+              <span>Kembali ke Histori Reviu</span>
             </button>
           </div>
           <VerifikatorView
             currentUser={currentUser}
-            onUpdateSubmission={handleUpdateHistoryReview}
-            permission={isHistoryInputMode ? "E" : "V"}
+            onUpdateSubmission={onUpdateSubmission || (() => undefined)}
+            permission="V"
+            allowHistoricalStatusEdit={activeRole === "superadmin" || activeRole === "verifikator"}
+            onHistoricalReviewChange={handleHistoricalReviewChange}
+            showFinalDecision={activeRole === "satker" || activeRole === "superadmin" || activeRole === "verifikator"}
             regulations={regulations}
-            reviewDetailSnapshot={isHistoryInputMode && latestHistoricalReviewSubmission ? latestHistoricalReviewSubmission : historicalReviewSubmission}
+            reviewDetailSnapshot={historicalReviewSubmission}
           />
+        </section>
+      )}
+
+      {activeRabSubTab === "reupload" && reuploadSubmission && (
+        <section className="space-y-6 animate-fadeIn">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={isReuploadAnalyzing}
+              onClick={() => {
+                setReuploadSubmission(null);
+                setReuploadFile(null);
+                setActiveRabSubTab("list");
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ArrowLeft className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              Kembali ke Daftar RAB
+            </button>
+            <span className="font-mono text-xs font-bold text-cyan-700 dark:text-cyan-400">{reuploadSubmission.ticketNumber}</span>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-2xl p-6 sm:p-8 space-y-6">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Upload Perbaikan RAB</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Unggah PDF pengganti untuk dokumen yang ditolak.</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-4">
+              <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Dokumen saat ini</span>
+              <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 break-all">{reuploadSubmission.rabFileName}</p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 p-5">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{reuploadFile?.name || "Pilih dokumen PDF perbaikan"}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Format PDF</p>
+              </div>
+              <label htmlFor="rab-reupload-input" className={`shrink-0 h-10 px-4 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-2 ${isReuploadAnalyzing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                <Upload className="w-4 h-4" />
+                Pilih PDF
+              </label>
+              <input id="rab-reupload-input" type="file" accept="application/pdf,.pdf" onChange={handleReuploadFileChange} disabled={isReuploadAnalyzing} className="hidden" />
+            </div>
+
+            {reuploadError && (
+              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{reuploadError}</span>
+              </div>
+            )}
+
+            {isReuploadAnalyzing && (
+              <div className="flex items-center gap-2 text-xs font-medium text-cyan-700 dark:text-cyan-300" role="status">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{reuploadProgressText || "Memeriksa RAB dengan AI (LLM)..."}</span>
+              </div>
+            )}
+
+            <div className="flex justify-end border-t border-slate-100 dark:border-slate-800 pt-5">
+              <button type="button" onClick={handleSaveRabReupload} disabled={!reuploadFile || isReuploadAnalyzing} className="h-10 px-5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold inline-flex items-center gap-2">
+                {isReuploadAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
+                {isReuploadAnalyzing ? reuploadProgressText || "Memeriksa dengan AI..." : "Periksa & Kirim Ulang dengan AI (LLM)"}
+              </button>
+            </div>
+          </div>
         </section>
       )}
 
@@ -1207,7 +1480,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                           {rabFile ? (
                             <span className="px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[10px] rounded-full font-mono font-bold flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" />
-                              {(rabFile.size / (1024 * 1024)).toFixed(2)} MB &bull; PDF Terpilih
+                              {formatFileSize(rabFile.size, 2)} &bull; PDF Terpilih
                             </span>
                           ) : (
                             <span className="px-2.5 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[10px] rounded-full font-semibold flex items-center gap-1">
@@ -1393,15 +1666,6 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setIsPrintModalOpen(true)}
-                    className="h-9 px-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>Cetak Laporan Telaah AI</span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
@@ -1819,7 +2083,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
             const updated: SubmissionData = {
               ...historyPreviewItem,
               rabFileName: file.name,
-              rabFileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+              rabFileSize: formatFileSize(file.size),
               pdfDataUrl: newUrl,
             };
             setHistoryPreviewItem(updated);
@@ -1829,9 +2093,6 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
           }}
         />
       )}
-
-      {/* History Printable Report Modal */}
-      {historyPrintItem && <PrintableReport isOpen={!!historyPrintItem} onClose={() => setHistoryPrintItem(null)} submission={historyPrintItem.submission} reportType={historyPrintItem.reportType} />}
 
       {/* PDF Preview Modal for RAB (Live Form) */}
       <PdfPreviewModal
@@ -1853,8 +2114,6 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
         onUploadFile={handleDirectFileUpload}
       />
 
-      {/* Printable Report Modal (Live Form) */}
-      {currentSubmission && <PrintableReport isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} submission={currentSubmission} reportType="ai-result" />}
     </div>
   );
 };

@@ -26,7 +26,7 @@ interface MasterRoViewProps {
   onUpdateMasterRo?: (item: HierarchyItem) => void;
   onDeleteMasterRo?: (itemId: string) => void;
   activeMenu?: ActiveMenuKey | string;
-  onSelectMenu?: (menu: ActiveMenuKey | any) => void;
+  onSelectMenu?: (menu: ActiveMenuKey) => void;
 }
 
 export const MasterRoView: React.FC<MasterRoViewProps> = ({

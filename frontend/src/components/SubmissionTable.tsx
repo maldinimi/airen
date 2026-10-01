@@ -1,5 +1,5 @@
 import type { SubmissionData } from "../types";
-import { CheckCircle2, Clock, ExternalLink, Eye, FileSpreadsheet, History, Pencil, Printer, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, Eye, FileSpreadsheet, History, Pencil, Trash2, XCircle } from "lucide-react";
 
 interface SubmissionTableProps {
   submissions: SubmissionData[];
@@ -10,7 +10,6 @@ interface SubmissionTableProps {
   onPreview: (submission: SubmissionData) => void;
   onEdit: (submission: SubmissionData) => void;
   onDelete: (submission: SubmissionData) => void;
-  onPrint: (item: { submission: SubmissionData; reportType: "ai-result" | "verified-report" }) => void;
 }
 
 const statusStyles: Record<SubmissionData["verificationStatus"], { badge: string; icon: string }> = {
@@ -37,7 +36,6 @@ export function SubmissionTable({
   onPreview,
   onEdit,
   onDelete,
-  onPrint,
 }: SubmissionTableProps) {
   return (
     <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
@@ -178,9 +176,6 @@ export function SubmissionTable({
                             </button>
                           </>
                         )}
-                        <button type="button" onClick={() => onPrint({ submission, reportType: isAccepted ? "verified-report" : "ai-result" })} className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 transition-colors cursor-pointer border border-blue-200 dark:border-blue-800" title="Cetak Dokumen Hasil AI / Berita Acara">
-                          <Printer className="w-4 h-4" />
-                        </button>
                       </div>
                     </td>
                   </tr>

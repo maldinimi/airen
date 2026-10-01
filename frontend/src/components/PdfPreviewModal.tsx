@@ -41,7 +41,6 @@ interface PdfPreviewModalProps {
     aiStatus?: string;
     aiScore?: number;
     submittedAt?: string;
-    pagu?: string;
   };
   onUploadFile?: (file: File) => void;
 }
@@ -169,7 +168,6 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ isOpen, onClos
         aiStatus: metadata?.aiStatus,
         aiScore: metadata?.aiScore,
         submittedAt: metadata?.submittedAt,
-        pagu: metadata?.pagu,
         prioritas: metadata?.prioritas,
       });
 
