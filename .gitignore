@@ -1,0 +1,40 @@
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Node and Vite output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python environments and generated files
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage*
+htmlcov/
+
+# Uploaded documents and local databases
+backend/uploads/
+*.sqlite
+*.sqlite3
+
+# Deployment and operating system files
+.vercel/
+.railway/
+.DS_Store
+Thumbs.db
+*.log
