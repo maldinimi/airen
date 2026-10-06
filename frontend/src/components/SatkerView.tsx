@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { UserAccount, UserRole, SubmissionData, ActiveMenuKey, RegulationDocument, ChecklistCriterion, ROLE_PERMISSIONS_MATRIX } from "../types";
 import { getUniquePrograms, getKegiatansForProgram, getKrosForKegiatan, getRosForKro, HIERARCHY_DATA } from "../data/budgetData";
-import { runAiRabAnalysis } from "../data/defaultCriteria";
 import {
   FileSpreadsheet,
   Upload,
@@ -28,7 +27,6 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { PdfPreviewModal } from "./PdfPreviewModal";
-import { inspectUploadedRabDocument } from "../utils/pdfInspector";
 import { VerifikatorView } from "./VerifikatorView";
 import { SubmissionTable } from "./SubmissionTable";
 import { storePdfBlob } from "../utils/pdfStorage";
@@ -202,87 +200,33 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       const regulationLabel = activeRegulations.length > 0
         ? activeRegulations.map((regulation) => regulation.title).join(" & ")
         : "PMK Standar Biaya Masukan (SBM)";
-      let analysis: {
+      const formData = new FormData();
+      formData.append("rab_file", reuploadFile);
+      const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
+      const response = await fetch(`${apiBaseUrl}/api/submissions/check-rab`, { method: "POST", body: formData });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Pemeriksaan AI gagal.");
+      }
+      const criteriaResults = data.criteriaResults;
+      if (!Array.isArray(criteriaResults) || criteriaResults.length === 0) {
+        throw new Error("Hasil pemeriksaan RAB dari server tidak lengkap.");
+      }
+      const analysis: {
         aiStatus: "LOLOS" | "TIDAK LOLOS";
         aiScore: number;
         aiReason: string;
         aiRecommendation: string;
         criteriaResults: ChecklistCriterion[];
         activeRegulationTitle?: string;
-      } | null = null;
-
-      try {
-        const formData = new FormData();
-        formData.append("rab_file", reuploadFile);
-        const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
-        const response = await fetch(`${apiBaseUrl}/api/submissions/check-rab`, { method: "POST", body: formData });
-
-        if (response.ok) {
-          const data = await response.json();
-          let criteriaResults = data.criteriaResults;
-          if (typeof criteriaResults === "string") {
-            try {
-              criteriaResults = JSON.parse(criteriaResults);
-            } catch {
-              criteriaResults = null;
-            }
-          }
-          if (Array.isArray(criteriaResults) && criteriaResults.length > 0) {
-            analysis = {
-              aiStatus: data.aiStatus,
-              aiScore: data.aiScore,
-              aiReason: data.aiReason,
-              aiRecommendation: data.aiRecommendation,
-              criteriaResults,
-              activeRegulationTitle: data.activeRegulationTitle || regulationLabel,
-            };
-          }
-        }
-      } catch (error) {
-        console.info("Backend AI belum aktif, beralih ke inspeksi PDF langsung di browser.", error);
-      }
-
-      if (!analysis) {
-        setReuploadProgressText(`Memeriksa isi PDF "${reuploadFile.name}"...`);
-        try {
-          analysis = await inspectUploadedRabDocument(
-            reuploadFile,
-            reuploadFile.name,
-            formatFileSize(reuploadFile.size),
-            reuploadSubmission.program,
-            reuploadSubmission.kegiatan,
-            reuploadSubmission.kro,
-            reuploadSubmission.ro,
-            regulations,
-          );
-        } catch (error) {
-          console.warn("Inspeksi PDF gagal, menggunakan fallback analisis lokal.", error);
-          analysis = runAiRabAnalysis(
-            reuploadSubmission.program,
-            reuploadSubmission.kegiatan,
-            reuploadSubmission.kro,
-            reuploadSubmission.ro,
-            reuploadFile.name,
-            regulations,
-          );
-        }
-      }
-
-      if (!analysis) throw new Error("Hasil pemeriksaan AI tidak tersedia.");
-
-      let criteriaResults = Array.isArray(analysis.criteriaResults) ? analysis.criteriaResults : [];
-      if (criteriaResults.length === 0) {
-        const fallbackAnalysis = runAiRabAnalysis(
-          reuploadSubmission.program,
-          reuploadSubmission.kegiatan,
-          reuploadSubmission.kro,
-          reuploadSubmission.ro,
-          reuploadFile.name,
-          regulations,
-        );
-        analysis = fallbackAnalysis;
-        criteriaResults = fallbackAnalysis.criteriaResults;
-      }
+      } = {
+        aiStatus: data.aiStatus,
+        aiScore: data.aiScore,
+        aiReason: data.aiReason,
+        aiRecommendation: data.aiRecommendation,
+        criteriaResults,
+        activeRegulationTitle: data.activeRegulationTitle || regulationLabel,
+      };
 
       setReuploadProgressText("Menyimpan hasil pemeriksaan dan mengirim RAB untuk reviu ulang...");
       const nowFormatted = formatIndonesianDateTime();
@@ -303,7 +247,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
         aiReason: analysis.aiReason,
         aiRecommendation: analysis.aiRecommendation,
         activeRegulationTitle: analysis.activeRegulationTitle || regulationLabel,
-        criteriaResults,
+        criteriaResults: analysis.criteriaResults,
         verificationStatus: "Menunggu",
         verifikatorNotes: "",
         verifiedBy: undefined,
@@ -319,7 +263,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
             aiScore: analysis.aiScore,
             aiReason: analysis.aiReason,
             aiRecommendation: analysis.aiRecommendation,
-            criteriaResults,
+            criteriaResults: analysis.criteriaResults,
           },
         ],
         auditTrail: [
@@ -340,7 +284,9 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("Pemeriksaan atau penyimpanan reupload RAB gagal.", error);
-      setReuploadError("Pemeriksaan AI atau penyimpanan berkas gagal. Berkas belum dikirim untuk reviu ulang; silakan coba lagi.");
+      setReuploadError(error instanceof Error
+        ? `${error.message} Berkas belum dikirim untuk reviu ulang.`
+        : "Pemeriksaan AI atau penyimpanan berkas gagal. Berkas belum dikirim untuk reviu ulang; silakan coba lagi.");
     } finally {
       setIsReuploadAnalyzing(false);
       setReuploadProgressText("");
@@ -489,9 +435,11 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     }
   };
 
-  // File Upload State: RAB PDF ONLY
+  // File upload state
   const [rabFile, setRabFile] = useState<File | null>(null);
   const [rabFileName, setRabFileName] = useState<string>("");
+  const [torFile, setTorFile] = useState<File | null>(null);
+  const [torFileName, setTorFileName] = useState<string>("");
   const [rabDataUrl, setRabDataUrl] = useState<string | undefined>(undefined);
   const [rabBlobUrl, setRabBlobUrl] = useState<string | undefined>(undefined);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -591,7 +539,25 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     }
   };
 
-  // Reset Formulir (Only available when rabFile !== null)
+  const handleTorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.currentTarget.value = "";
+    if (!file) return;
+
+    const header = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    if (!file.name.toLowerCase().endsWith(".pdf") || new TextDecoder().decode(header) !== "%PDF-") {
+      setUploadError("Berkas TOR harus berupa PDF yang valid.");
+      return;
+    }
+
+    setTorFile(file);
+    setTorFileName(file.name);
+    setUploadError(null);
+    await storePdfBlob(`temp_tor_${file.name}`, file);
+    await storePdfBlob(`tor_${file.name}`, file);
+  };
+
+  // Reset formulir.
   const handleResetForm = () => {
     setSelectedProgram("");
     setSelectedKegiatan("");
@@ -610,6 +576,8 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     setRabBlobUrl(undefined);
     setRabFile(null);
     setRabFileName("");
+    setTorFile(null);
+    setTorFileName("");
     setRabDataUrl(undefined);
     setCurrentSubmission(null);
     setShowReferenceDocsTrigger(false);
@@ -626,7 +594,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   // Filtered submissions based on 5-field filter form
   const filteredSubmissions = filterSubmissions(relevantSubmissions, appliedFilters);
 
-  // Submit RAB to AI Engine
+  // Submit RAB and optional TOR to the local AI engine.
   const handleAiSubmit = async () => {
     if (!selectedProgram || !selectedKegiatan || !selectedKro || !selectedRo || !selectedTahunAnggaran) {
       setUploadError("Harap lengkapi seluruh pilihan hierarki anggaran (Program, Kegiatan, KRO, RO, dan Tahun Anggaran) sebelum mengajukan telaah AI.");
@@ -639,174 +607,123 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     setUploadError(null);
     setIsAnalyzing(true);
     const regLabel = activeRegulations.length > 0 ? activeRegulations.map((r) => r.title).join(" & ") : "PMK Standar Biaya Masukan (SBM)";
-
-    setAnalysisProgressText(`Membaca berkas PDF "${rabFileName}"...`);
-    await new Promise((r) => setTimeout(r, 350));
-    setAnalysisProgressText(`Mengekstraksi konten tabel biaya, kode BAS, dan pagu dari "${rabFileName}"...`);
-    await new Promise((r) => setTimeout(r, 450));
-    setAnalysisProgressText(`Memvalidasi kepatuhan 20 Kriteria Wajib terhadap ${activeRegulations[0]?.title || "PMK SBM"}...`);
-    await new Promise((r) => setTimeout(r, 550));
-    setAnalysisProgressText(`Menghasilkan laporan telaah cerdas dokumen "${rabFileName}"...`);
-
-    let analysis: RabAnalysisResult | null = null;
-
-    if (rabFile) {
-      try {
-        const formData = new FormData();
-        formData.append("rab_file", rabFile);
-        formData.append("program", selectedProgram);
-        formData.append("kegiatan", selectedKegiatan);
-        formData.append("kro", selectedKro);
-        formData.append("ro", selectedRo);
-        formData.append("tahun_anggaran", selectedTahunAnggaran);
-        formData.append("unit_eselon1", currentUnitEselon1 || "Direktorat Jenderal Komunikasi Publik dan Media");
-        formData.append("unit_eselon2", currentUnitEselon2 || "Direktorat Informasi Publik");
-        formData.append("prioritas", currentPrioritas || "Prioritas Nasional");
-        formData.append("satker_user_id", currentUser.id);
-
-        const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
-        const resp = await fetch(`${apiBaseUrl}/api/submissions/upload-and-check`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (resp.ok) {
-          const data = await resp.json();
-          let cResults = data.ai_criteria_results;
-          if (typeof cResults === "string") {
-            try {
-              cResults = JSON.parse(cResults);
-            } catch {
-              cResults = null;
-            }
-          }
-          if (Array.isArray(cResults) && cResults.length > 0) {
-            analysis = {
-              aiStatus: data.ai_status,
-              aiScore: data.ai_score,
-              aiReason: data.ai_reason,
-              aiRecommendation: data.ai_recommendation,
-              criteriaResults: cResults,
-              activeRegulationTitle: data.activeRegulationTitle || regLabel,
-              ticketNumber: data.ticket_number,
-            };
-          }
-        }
-      } catch (e) {
-        console.info("Backend API belum aktif, beralih ke inspeksi dokumen cerdas langsung dari berkas...");
-      }
-    }
-
-    if (!analysis) {
-      try {
-        analysis = await inspectUploadedRabDocument(
-          rabFile,
-          rabFileName,
-          rabFile ? formatFileSize(rabFile.size) : "1.8 MB",
-          selectedProgram,
-          selectedKegiatan,
-          selectedKro,
-          selectedRo,
-          regulations,
-        );
-      } catch (err) {
-        console.warn("inspectUploadedRabDocument error, fallback to runAiRabAnalysis:", err);
-        analysis = runAiRabAnalysis(selectedProgram, selectedKegiatan, selectedKro, selectedRo, rabFileName, regulations);
-      }
-    }
-
-    let finalCriteria = Array.isArray(analysis?.criteriaResults) ? analysis.criteriaResults : [];
-    if (finalCriteria.length === 0) {
-      const fallbackAnalysis = runAiRabAnalysis(selectedProgram, selectedKegiatan, selectedKro, selectedRo, rabFileName, regulations);
-      finalCriteria = fallbackAnalysis.criteriaResults;
-      if (!analysis) {
-        analysis = fallbackAnalysis;
-      }
-    }
-
-    const nowFormatted = formatIndonesianDateTime();
-    const userLabel = `${currentUser.name} (${currentUser.id})`;
-
-    // Generate related reference documents for post-submit trigger
-    const refDocs = [
-      activeRegulations[0]?.title || "Peraturan Menteri Keuangan No. 49/PMK.02/2023 tentang Standar Biaya Masukan TA 2026",
-      "Petunjuk Teknis Penyusunan Dokumen RKA-K/L dan Rincian Anggaran Biaya Kementerian Komunikasi dan Digital RI",
-      "Bagan Akun Standar (BAS) 6 Digit Belanja Operasional & Non-Operasional Perbendaharaan RI",
-      "Panduan Batas Tarif Standar Honorarium & Perjalanan Dinas Dalam Negeri",
-    ];
-
-    const newSubmission: SubmissionData = {
-      id: `SUB-${Date.now()}`,
-      ticketNumber: analysis?.ticketNumber || `RAB/KOMDIGI/${selectedTahunAnggaran || new Date().getFullYear()}/${Math.floor(100 + Math.random() * 900)}`,
-      satkerUserId: currentUser.id,
-      satkerUserName: currentUser.name,
-      satkerUnit: currentUser.unit,
-      submittedAt: nowFormatted,
-      program: selectedProgram,
-      kegiatan: selectedKegiatan,
-      kro: selectedKro,
-      ro: selectedRo,
-      tahunAnggaran: selectedTahunAnggaran || "2026",
-      unitEselon1: currentUnitEselon1 || "Direktorat Jenderal Komunikasi Publik dan Media",
-      unitEselon2: currentUnitEselon2 || "Direktorat Informasi Publik",
-      prioritas: currentPrioritas || "Prioritas Nasional",
-      rabFileName: rabFileName,
-      rabFileSize: rabFile ? formatFileSize(rabFile.size) : "1.8 MB",
-      pdfDataUrl: rabBlobUrl || rabDataUrl,
-      activeRegulationTitle: analysis?.activeRegulationTitle || regLabel,
-
-      // Klasifikasi Kategori (Dropdown) & Deskripsi (Teks)
-      kategori: formKategori || "Kategori 1",
-      deskripsi: formDeskripsi.trim(),
-      kategori1: formKategori || "Kategori 1",
-      kategori2: "",
-      kategori3: "",
-
-      // User Logging Metadata
-      createdBy: userLabel,
-      updatedBy: userLabel,
-      auditTrail: [
-        {
-          action: "CREATE",
-          performedBy: userLabel,
-          timestamp: nowFormatted,
-          details: `Pendaftaran berkas RAB PDF: ${rabFileName}`,
-        },
-      ],
-
-      // Related Reference Documents Trigger
-      referenceDocuments: refDocs,
-
-      aiStatus: analysis?.aiStatus || "LOLOS",
-      aiScore: typeof analysis?.aiScore === "number" ? analysis.aiScore : 100,
-      aiReason: analysis?.aiReason || "Penelaahan dokumen RAB berhasil diselesaikan.",
-      aiRecommendation: analysis?.aiRecommendation || "Patuhi seluruh standar biaya SBM yang berlaku.",
-      criteriaResults: finalCriteria,
-      verificationStatus: "Menunggu",
-      verifikatorNotes: "",
-      reviewHistory: [{ verifiedAt: nowFormatted, verificationStatus: "Menunggu", rabFileName }],
-    };
-
-    setCurrentSubmission(newSubmission);
-    setShowReferenceDocsTrigger(true);
-    setIsResultsCollapsed(false);
-    setIsAnalyzing(false);
-
-    if (rabFile) {
-      storePdfBlob(newSubmission.id, rabFile);
-      storePdfBlob(newSubmission.ticketNumber, rabFile);
-      storePdfBlob(newSubmission.rabFileName, rabFile);
-    }
-
     try {
-      onAddSubmission(newSubmission);
-    } catch (e) {
-      console.warn("Could not save to parent submission list:", e);
-    }
+      setAnalysisProgressText(`Mengirim RAB${torFile ? " dan TOR" : ""} ke AI lokal...`);
+      const formData = new FormData();
+      formData.append("rab_file", rabFile);
+      if (torFile) formData.append("tor_file", torFile);
+      formData.append("program", selectedProgram);
+      formData.append("kegiatan", selectedKegiatan);
+      formData.append("kro", selectedKro);
+      formData.append("ro", selectedRo);
+      formData.append("unit_eselon1", currentUnitEselon1 || "Direktorat Jenderal Komunikasi Publik dan Media");
+      formData.append("unit_eselon2", currentUnitEselon2 || "Direktorat Informasi Publik");
+      formData.append("prioritas", currentPrioritas || "Prioritas Nasional");
+      formData.append("satker_user_id", currentUser.id);
 
-    window.alert("Data pengajuan RAB berhasil disimpan.");
-    onSelectMenu?.("satker_list");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+      const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
+      const response = await fetch(`${apiBaseUrl}/api/submissions/upload-and-check`, { method: "POST", body: formData });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Pemeriksaan AI lokal gagal.");
+      }
+
+      const criteriaResults = data.ai_criteria_results;
+      if (!Array.isArray(criteriaResults) || criteriaResults.length === 0) {
+        throw new Error("Hasil pemeriksaan RAB dari server tidak lengkap.");
+      }
+      const analysis: RabAnalysisResult = {
+        aiStatus: data.ai_status,
+        aiScore: data.ai_score,
+        aiReason: data.ai_reason,
+        aiRecommendation: data.ai_recommendation,
+        criteriaResults,
+        activeRegulationTitle: data.activeRegulationTitle || regLabel,
+        ticketNumber: data.ticket_number,
+      };
+      const torAnalysis = data.torAnalysis;
+      if (torFile && (!torAnalysis || !Array.isArray(torAnalysis.criteriaResults))) {
+        throw new Error("Hasil pemeriksaan TOR dari server tidak lengkap.");
+      }
+
+      const nowFormatted = formatIndonesianDateTime();
+      const userLabel = `${currentUser.name} (${currentUser.id})`;
+      const refDocs = [
+        activeRegulations[0]?.title || "Peraturan Menteri Keuangan tentang Standar Biaya Masukan",
+        "Petunjuk Teknis Penyusunan Dokumen RKA-K/L dan Rincian Anggaran Biaya Kementerian Komunikasi dan Digital RI",
+        "Bagan Akun Standar (BAS) 6 Digit Belanja Operasional & Non-Operasional Perbendaharaan RI",
+      ];
+      const newSubmission: SubmissionData = {
+        id: `SUB-${Date.now()}`,
+        ticketNumber: analysis.ticketNumber || `RAB/KOMDIGI/${selectedTahunAnggaran}/${Math.floor(100 + Math.random() * 900)}`,
+        satkerUserId: currentUser.id,
+        satkerUserName: currentUser.name,
+        satkerUnit: currentUser.unit,
+        submittedAt: nowFormatted,
+        program: selectedProgram,
+        kegiatan: selectedKegiatan,
+        kro: selectedKro,
+        ro: selectedRo,
+        tahunAnggaran: selectedTahunAnggaran,
+        unitEselon1: currentUnitEselon1 || "Direktorat Jenderal Komunikasi Publik dan Media",
+        unitEselon2: currentUnitEselon2 || "Direktorat Informasi Publik",
+        prioritas: currentPrioritas || "Prioritas Nasional",
+        rabFileName,
+        rabFileSize: formatFileSize(rabFile.size),
+        torFileName: torFile?.name,
+        torAiStatus: torAnalysis?.aiStatus,
+        torAiScore: torAnalysis?.aiScore,
+        torAiReason: torAnalysis?.aiReason,
+        torAiRecommendation: torAnalysis?.aiRecommendation,
+        torCriteriaResults: torAnalysis?.criteriaResults,
+        pdfDataUrl: rabBlobUrl || rabDataUrl,
+        activeRegulationTitle: analysis.activeRegulationTitle || regLabel,
+        kategori: formKategori || "Kategori 1",
+        deskripsi: formDeskripsi.trim(),
+        kategori1: formKategori || "Kategori 1",
+        kategori2: "",
+        kategori3: "",
+        createdBy: userLabel,
+        updatedBy: userLabel,
+        auditTrail: [
+          {
+            action: "CREATE",
+            performedBy: userLabel,
+            timestamp: nowFormatted,
+            details: `Pendaftaran berkas RAB PDF${torFile ? ` dan TOR PDF: ${torFile.name}` : ""}: ${rabFileName}`,
+          },
+        ],
+        referenceDocuments: refDocs,
+        aiStatus: analysis.aiStatus,
+        aiScore: analysis.aiScore,
+        aiReason: analysis.aiReason,
+        aiRecommendation: analysis.aiRecommendation,
+        criteriaResults: analysis.criteriaResults,
+        verificationStatus: "Menunggu",
+        verifikatorNotes: "",
+        reviewHistory: [{ verifiedAt: nowFormatted, verificationStatus: "Menunggu", rabFileName }],
+      };
+
+      await storePdfBlob(newSubmission.id, rabFile);
+      await storePdfBlob(newSubmission.ticketNumber, rabFile);
+      await storePdfBlob(newSubmission.rabFileName, rabFile);
+      if (torFile) {
+        await storePdfBlob(`tor_${newSubmission.id}`, torFile);
+      }
+      onAddSubmission(newSubmission);
+      setCurrentSubmission(newSubmission);
+      setShowReferenceDocsTrigger(true);
+      setIsResultsCollapsed(false);
+      window.alert("Data pengajuan RAB berhasil disimpan.");
+      onSelectMenu?.("satker_list");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      console.error("Pemeriksaan dokumen oleh AI lokal gagal.", error);
+      setUploadError(error instanceof Error ? error.message : "Pemeriksaan AI lokal gagal. Pastikan backend dan vLLM aktif.");
+    } finally {
+      setIsAnalyzing(false);
+      setAnalysisProgressText("");
+    }
   };
 
   return (
@@ -1233,17 +1150,17 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
             {/* Outline Label Badge Terpadu */}
             <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-cyan-600 text-white border-cyan-400 select-none">
               <Upload className="w-3.5 h-3.5" />
-              <span>PEMBAHASAN TERPADU &bull; FORMULIR PENGAJUAN TELAAH DOKUMEN RAB BARU</span>
+              <span>PEMBAHASAN TERPADU &bull; FORMULIR TELAAH DOKUMEN TOR DAN RAB</span>
             </div>
 
             <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-2">
                   <FileSpreadsheet className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                  <span>Formulir Terpadu Hierarki Anggaran &amp; Berkas PDF RAB</span>
+                  <span>Formulir Terpadu Hierarki Anggaran &amp; Berkas PDF TOR/RAB</span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Lengkapi hierarki anggaran beserta tahun anggaran, tentukan klasifikasi kategori dan deskripsi, unggah dokumen PDF RAB, dan kirim untuk pemeriksaan otomatis AI.
+                  Lengkapi hierarki anggaran, unggah RAB dan TOR (opsional), lalu kirim untuk penelaahan AI lokal.
                 </p>
               </div>
 
@@ -1516,6 +1433,54 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                   </div>
                 </div>
 
+                <div className="p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">D. Unggah TOR (Opsional)</span>
+                    <span className="text-[11px] text-slate-400 font-medium">PDF dengan teks yang dapat diekstrak</span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                        {torFileName || "Belum ada dokumen TOR"}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Jika diunggah, TOR akan ditelaah dengan kriteria terpisah dan disimpan bersama hasil RAB.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {torFile && (
+                        <>
+                          <span className="text-[11px] text-emerald-700 dark:text-emerald-300">{formatFileSize(torFile.size)}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTorFile(null);
+                              setTorFileName("");
+                            }}
+                            className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                          >
+                            Hapus TOR
+                          </button>
+                        </>
+                      )}
+                      <label
+                        htmlFor="tor-file-upload-input"
+                        className="h-9 px-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {torFile ? "Ganti TOR" : "Pilih TOR"}
+                      </label>
+                      <input
+                        id="tor-file-upload-input"
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={handleTorUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {uploadError && (
                   <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2.5">
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -1651,7 +1616,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
               {/* Outline Label Badge */}
               <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-amber-600 text-white border-amber-400 select-none">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>HASIL PENELAAHAN AI &bull; 20 KRITERIA KEPATUHAN SBM</span>
+                <span>HASIL PENELAAHAN AI LOKAL &bull; RAB DAN TOR</span>
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
@@ -1721,6 +1686,58 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                       </tbody>
                     </table>
                   </div>
+                  {currentSubmission.torFileName && currentSubmission.torCriteriaResults && (
+                    <section className="space-y-4 border-t border-slate-200 dark:border-slate-700 pt-5">
+                      <div>
+                        <h5 className="text-sm font-bold text-slate-900 dark:text-white">
+                          Telaah TOR: {currentSubmission.torFileName}
+                        </h5>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Skor {currentSubmission.torAiScore}% ({currentSubmission.torAiStatus}) &bull; {currentSubmission.torCriteriaResults.length} kriteria
+                        </p>
+                      </div>
+                      {currentSubmission.torAiReason && (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                          <strong className="text-slate-900 dark:text-white">Temuan TOR: </strong>
+                          <span className="text-slate-700 dark:text-slate-300">{currentSubmission.torAiReason}</span>
+                          {currentSubmission.torAiRecommendation && (
+                            <p className="mt-2 whitespace-pre-line">
+                              <strong className="text-slate-900 dark:text-white">Rekomendasi: </strong>
+                              {currentSubmission.torAiRecommendation}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold sticky top-0">
+                            <tr>
+                              <th className="px-4 py-3 w-12 text-center">No</th>
+                              <th className="px-4 py-3">Kriteria TOR</th>
+                              <th className="px-4 py-3 w-28 text-center">Hasil AI</th>
+                              <th className="px-4 py-3">Catatan Bukti AI</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {currentSubmission.torCriteriaResults.map((criterion) => (
+                              <tr key={criterion.id}>
+                                <td className="px-4 py-2.5 text-center font-mono text-slate-400">{criterion.id}</td>
+                                <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-white">{criterion.text}</td>
+                                <td className="px-4 py-2.5 text-center">
+                                  {criterion.status === "passed" ? (
+                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-bold">Lolos</span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full text-[11px] font-bold">Perlu telaah</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{criterion.notes}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
                 </div>
               )}
             </div>
@@ -1787,6 +1804,26 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                   );
                 })()}
               </div>
+
+              {selectedDetailSubmission.torFileName && (
+                <section className="p-4 rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 space-y-2 text-xs">
+                  <h4 className="font-bold text-slate-900 dark:text-white">Dokumen TOR: {selectedDetailSubmission.torFileName}</h4>
+                  <p className="text-slate-700 dark:text-slate-300">
+                    Hasil telaah: {selectedDetailSubmission.torAiStatus || "Tidak tersedia"}
+                    {typeof selectedDetailSubmission.torAiScore === "number" ? ` (${selectedDetailSubmission.torAiScore}%)` : ""}
+                  </p>
+                  {selectedDetailSubmission.torAiReason && <p className="text-slate-600 dark:text-slate-400">{selectedDetailSubmission.torAiReason}</p>}
+                  {selectedDetailSubmission.torCriteriaResults && (
+                    <ul className="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-1">
+                      {selectedDetailSubmission.torCriteriaResults.map((criterion) => (
+                        <li key={criterion.id}>
+                          <strong>{criterion.status === "passed" ? "Lolos" : "Perlu telaah"}:</strong> {criterion.text} — {criterion.notes}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
 
               {/* Hierarchy and Categories */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">

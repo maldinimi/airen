@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Regulation
-from services.gemini_checker import extract_pdf_text
+from services.ai_checker import extract_pdf_text
 
 router = APIRouter()
 
@@ -45,6 +45,11 @@ async def upload_regulation(
     db: Session = Depends(get_db),
 ):
     pdf_bytes = await file.read()
+    try:
+        extracted_text = extract_pdf_text(pdf_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     file_path = f"uploads/regulations/{file.filename}"
     with open(file_path, "wb") as destination:
         destination.write(pdf_bytes)
@@ -58,7 +63,7 @@ async def upload_regulation(
         file_name=file.filename,
         file_path=file_path,
         file_size=f"{round(len(pdf_bytes) / 1024, 1)} KB",
-        extracted_text=extract_pdf_text(pdf_bytes),
+        extracted_text=extracted_text,
         is_active=True,
         uploaded_by_id=uploaded_by_id or None,
     )

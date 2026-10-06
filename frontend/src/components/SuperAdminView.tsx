@@ -1213,7 +1213,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                           </div>
                           <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
                             <span className="text-[10px] text-slate-400 uppercase font-bold block">Model AI Penguji</span>
-                            <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">Gemini 1.5 Pro</span>
+                            <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">Qwen2.5 3B • vLLM</span>
                           </div>
                         </div>
 

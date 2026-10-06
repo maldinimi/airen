@@ -1,4 +1,3 @@
-import os
 import uuid
 from datetime import datetime
 
@@ -7,34 +6,40 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Regulation, Submission
-from services.gemini_checker import analyze_rab_document
+from services.ai_checker import AIServiceError, analyze_document
 
 router = APIRouter()
 
 
-@router.post("/api/submissions/check-rab")
-async def check_rab(
-    rab_file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+def _analyze_upload(
+    uploaded_file: UploadFile,
+    pdf_bytes: bytes,
+    document_type: str,
+    db: Session,
 ):
-    pdf_bytes = await rab_file.read()
     active_regulation = db.query(Regulation).filter(Regulation.is_active == True).first()
-    regulation_bytes = None
+    try:
+        return analyze_document(
+            pdf_bytes=pdf_bytes,
+            file_name=uploaded_file.filename or f"dokumen-{document_type.lower()}.pdf",
+            document_type=document_type,
+            regulation_text=active_regulation.extracted_text if active_regulation else None,
+            regulation_title=active_regulation.title if active_regulation else None,
+        )
+    except AIServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if active_regulation and os.path.exists(active_regulation.file_path):
-        try:
-            with open(active_regulation.file_path, "rb") as source:
-                regulation_bytes = source.read()
-        except OSError:
-            pass
 
-    return analyze_rab_document(
-        pdf_bytes=pdf_bytes,
-        file_name=rab_file.filename or "dokumen-rab.pdf",
-        regulation_bytes=regulation_bytes,
-        regulation_text=active_regulation.extracted_text if active_regulation else None,
-        regulation_title=active_regulation.title if active_regulation else None,
-    )
+@router.post("/api/submissions/check-rab")
+async def check_rab(rab_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    return _analyze_upload(rab_file, await rab_file.read(), "RAB", db)
+
+
+@router.post("/api/submissions/check-tor")
+async def check_tor(tor_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    return _analyze_upload(tor_file, await tor_file.read(), "TOR", db)
 
 
 @router.post("/api/submissions/upload-and-check")
@@ -48,26 +53,34 @@ async def submit_rab(
     prioritas: str = Form(...),
     satker_user_id: str = Form(...),
     rab_file: UploadFile = File(...),
+    tor_file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
 ):
     pdf_bytes = await rab_file.read()
     active_regulation = db.query(Regulation).filter(Regulation.is_active == True).first()
-    regulation_bytes = None
-
-    if active_regulation and os.path.exists(active_regulation.file_path):
-        try:
-            with open(active_regulation.file_path, "rb") as source:
-                regulation_bytes = source.read()
-        except OSError:
-            pass
-
-    ai_result = analyze_rab_document(
-        pdf_bytes=pdf_bytes,
-        file_name=rab_file.filename,
-        regulation_bytes=regulation_bytes,
-        regulation_text=active_regulation.extracted_text if active_regulation else None,
-        regulation_title=active_regulation.title if active_regulation else None,
-    )
+    try:
+        ai_result = analyze_document(
+            pdf_bytes=pdf_bytes,
+            file_name=rab_file.filename or "dokumen-rab.pdf",
+            document_type="RAB",
+            regulation_text=active_regulation.extracted_text if active_regulation else None,
+            regulation_title=active_regulation.title if active_regulation else None,
+        )
+        tor_result = None
+        if tor_file:
+            tor_result = analyze_document(
+                pdf_bytes=await tor_file.read(),
+                file_name=tor_file.filename or "dokumen-tor.pdf",
+                document_type="TOR",
+                regulation_text=active_regulation.extracted_text if active_regulation else None,
+                regulation_title=active_regulation.title if active_regulation else None,
+                companion_text=ai_result["extractedText"],
+                companion_file_name=rab_file.filename or "dokumen-rab.pdf",
+            )
+    except AIServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     extracted_text = ai_result.pop("extractedText", "")
     ticket_number = f"TIKET-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
@@ -104,6 +117,8 @@ async def submit_rab(
     submission_data = {column.name: getattr(submission, column.name) for column in Submission.__table__.columns}
     submission_data["extractedText"] = extracted_text
     submission_data["activeRegulationTitle"] = submission.regulation_title
+    submission_data["torAnalysis"] = tor_result
+    submission_data["torFileName"] = tor_file.filename if tor_file else None
     return submission_data
 
 

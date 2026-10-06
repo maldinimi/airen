@@ -121,6 +121,12 @@ export interface SubmissionData {
   prioritas: string;
   rabFileName: string;
   rabFileSize: string;
+  torFileName?: string;
+  torAiStatus?: "LOLOS" | "TIDAK LOLOS";
+  torAiScore?: number;
+  torAiReason?: string;
+  torAiRecommendation?: string;
+  torCriteriaResults?: ChecklistCriterion[];
   pdfDataUrl?: string;
   activeRegulationTitle?: string;
 

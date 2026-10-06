@@ -90,6 +90,11 @@ export function SubmissionTable({
                             {submission.rabFileName}
                           </span>
                           <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono block">{submission.rabFileSize || "2.1 MB"} &bull; Format PDF</span>
+                          {submission.torFileName && (
+                            <span className="text-[10px] text-violet-700 dark:text-violet-300 block mt-1 truncate max-w-xs" title={submission.torFileName}>
+                              TOR: {submission.torFileName} {submission.torAiStatus ? `(${submission.torAiStatus})` : ""}
+                            </span>
+                          )}
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             {(submission.kategori || submission.kategori1) && (
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">

@@ -181,7 +181,7 @@ export async function inspectUploadedRabDocument(
     let notes = "";
 
     if (!isRecognizedRab) {
-      // Jika dokumen yang diupload BUKAN berkas RAB (contohnya file teks umum / PDF lain yang dinamai Gemini.pdf)
+      // Jika dokumen yang diupload BUKAN berkas RAB (contohnya file teks umum / PDF lain dengan nama yang tidak terkait)
       switch (criterion.id) {
         case 1:
         case 2:
