@@ -25,6 +25,8 @@ import {
   ShieldCheck,
   RotateCw,
   Sliders,
+  ArrowLeft,
+  Save,
 } from "lucide-react";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { RegulationCardList } from "./RegulationCardList";
@@ -140,13 +142,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
   const [filterAccess, setFilterAccess] = useState<string>("all");
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
 
   // Search & Filter for Regulations
   const [regSearchTerm, setRegSearchTerm] = useState("");
   const [regFilterCategory, setRegFilterCategory] = useState<string>("all");
-  const [isRegModalOpen, setIsRegModalOpen] = useState(false);
   const [editingReg, setEditingReg] = useState<RegulationDocument | null>(null);
 
   // History Indeksing Sync State (Interactive demonstration)
@@ -231,10 +231,6 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     }
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-  };
-
   // Reset errors and edit state when activeMenu changes
   useEffect(() => {
     if (activeMenu === "admin_users" || activeMenu === "menu_users") {
@@ -252,6 +248,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     }
   }, [activeMenu]);
 
+  // Buka Halaman Edit Pengguna (Halaman Baru / Full Page Subview)
   const openEditModal = (user: UserAccount) => {
     setEditingUser(user);
     setFormId(user.id);
@@ -262,7 +259,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     setFormIsActive(user.isActive);
     setFormMenuAccess(user.menuAccess || "both");
     setFormError(null);
-    setIsModalOpen(true);
+    setUserSubView("add");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const selectSingleRole = (role: UserRole) => {
@@ -333,7 +331,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
     if (validationModal.isEdit) {
       onUpdateUser(validationModal.user);
-      setIsModalOpen(false);
+      resetAddUserForm();
+      setUserSubView("list");
+      if (onSelectMenu) {
+        onSelectMenu("menu_users");
+      }
     } else {
       onAddUser(validationModal.user);
       resetAddUserForm();
@@ -376,7 +378,6 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
   const navigateToUploadRegulationPage = () => {
     resetRegulationForm();
-    setIsRegModalOpen(false);
     setRegError(null);
     setRegSubTab("unggah_peraturan");
     if (onSelectMenu) {
@@ -384,6 +385,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     }
   };
 
+  // Buka Halaman Edit Dokumen Acuan (Halaman Baru / Full Page Subview)
   const openEditRegulationModal = (reg: RegulationDocument) => {
     setEditingReg(reg);
     setRegTitle(reg.title);
@@ -396,7 +398,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     setRegPdfDataUrl(reg.pdfDataUrl);
     setRegIsActive(reg.isActive);
     setRegError(null);
-    setIsRegModalOpen(true);
+    setRegSubTab("unggah_peraturan");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleRegulationFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -459,6 +462,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         isActive: regIsActive,
       };
       onUpdateRegulation(updatedRegulation);
+      resetRegulationForm();
+      setRegSubTab("acuan_ai");
+      if (onSelectMenu) {
+        onSelectMenu("menu_acuan");
+      }
     } else {
       const newRegulation: RegulationDocument = {
         id: `REG-${Date.now()}`,
@@ -481,8 +489,6 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         onSelectMenu("menu_acuan");
       }
     }
-
-    setIsRegModalOpen(false);
   };
 
   const handleTriggerReindex = () => {
@@ -543,23 +549,33 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
               <div className="relative bg-white dark:bg-slate-900 border-2 border-cyan-500 dark:border-cyan-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm transition-all space-y-6 sm:space-y-7">
                 {/* Outline Label Badge */}
                 <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-cyan-600 text-white border-cyan-400 select-none">
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>FORMULIR &bull; TAMBAH PENGGUNA BARU</span>
+                  {editingUser ? <Edit3 className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
+                  <span>{editingUser ? "FORMULIR EDIT • UBAH PENGGUNA & HAK AKSES" : "FORMULIR • TAMBAH PENGGUNA BARU"}</span>
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                   <div>
                     <h3 className="text-sm sm:text-base font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                      <UserPlus className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                      <span>Formulir Pendaftaran Pengguna &amp; Hak Akses</span>
+                      {editingUser ? <Edit3 className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <UserPlus className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />}
+                      <span>{editingUser ? "Formulir Edit Pengguna & Hak Akses" : "Formulir Pendaftaran Pengguna & Hak Akses"}</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Daftarkan akun aparatur/pejabat baru, tentukan satuan kerja eselon, atur kewenangan menu (*View/Edit/Both*), dan pilih peran (*role*).
+                      {editingUser
+                        ? `Perbarui profil, unit kerja eselon, peran dinas resmi, dan hak akses menu untuk ${editingUser.name}.`
+                        : "Daftarkan akun aparatur/pejabat baru, tentukan satuan kerja eselon, atur kewenangan menu (*View/Edit/Both*), dan pilih peran (*role*)."}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={closeAddUserPage}
+                      className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 border border-slate-200 dark:border-slate-700"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Kembali ke Daftar</span>
+                    </button>
+                    <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 hidden sm:inline-block">
                       Total Terdaftar: {users.length} Akun
                     </span>
                   </div>
@@ -593,12 +609,19 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                         type="text"
                         maxLength={8}
                         required
+                        readOnly={!!editingUser}
                         value={formId}
                         onChange={(e) => setFormId(e.target.value.replace(/\s+/g, ""))}
                         placeholder="Contoh: 19890422 (8 digit)"
-                        className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 font-mono text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs"
+                        className={`w-full px-3.5 py-2.5 text-xs border rounded-xl font-mono text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs ${
+                          editingUser
+                            ? "bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-80"
+                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-cyan-500"
+                        }`}
                       />
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Gunakan 8 digit angka/karakter unik akun aparatur Komdigi.</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                        {editingUser ? "ID Pengguna / NIP bersifat permanen dan tidak dapat diubah." : "Gunakan 8 digit angka/karakter unik akun aparatur Komdigi."}
+                      </p>
                     </div>
 
                     {/* Nama Lengkap & Gelar */}
@@ -797,8 +820,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                       type="submit"
                       className="w-full sm:w-auto h-11 px-6 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl shadow-md shadow-cyan-600/30 hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
-                      <UserPlus className="w-4 h-4" />
-                      <span>Simpan Pengguna Baru</span>
+                      {editingUser ? <Check className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                      <span>{editingUser ? "Simpan Perubahan Pengguna" : "Simpan Pengguna Baru"}</span>
                     </button>
                   </div>
                 </form>
@@ -1312,16 +1335,37 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
             <div className="space-y-6 animate-fadeIn">
               {/* Main Upload Card (Bukan Pop-up) */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-                <div className="p-6 sm:p-7 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50">
+                <div className="p-6 sm:p-7 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className="p-2.5 rounded-xl bg-cyan-600 text-white shadow-md shadow-cyan-600/30">
-                      <Upload className="w-5 h-5" />
+                      {editingReg ? <Edit3 className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Unggah Peraturan Baru (PDF)</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Standar Biaya Masukan (SBM) &amp; Juknis Resmi Penelaahan Otomatis Berbasis AI</p>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        {editingReg ? "Edit Peraturan Acuan & Regulasi AI (PDF)" : "Unggah Peraturan Baru (PDF)"}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {editingReg
+                          ? `Perbarui rincian metadata dokumen acuan telaah AI: ${editingReg.title}`
+                          : "Standar Biaya Masukan (SBM) & Juknis Resmi Penelaahan Otomatis Berbasis AI"}
+                      </p>
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetRegulationForm();
+                      setRegSubTab("acuan_ai");
+                      if (onSelectMenu) {
+                        onSelectMenu("menu_acuan");
+                      }
+                    }}
+                    className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors self-start sm:self-auto shrink-0 border border-slate-200 dark:border-slate-700"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Kembali ke Acuan AI</span>
+                  </button>
                 </div>
 
                 {!isEditable ? (
@@ -1449,8 +1493,13 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                         <input
                           id="page-input-reg-target-year"
                           type="text"
+                          inputMode="numeric"
+                          maxLength={4}
                           value={regTargetYear}
-                          onChange={(e) => setRegTargetYear(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                            setRegTargetYear(val);
+                          }}
                           placeholder="2026"
                           className="w-full px-4 py-2.5 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-mono placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
@@ -1504,8 +1553,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                         type="submit"
                         className="w-full sm:w-auto h-11 px-6 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl shadow-md shadow-cyan-600/30 hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
-                        <Upload className="w-4 h-4" />
-                        <span>Simpan &amp; Unggah Peraturan</span>
+                        {editingReg ? <Save className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                        <span>{editingReg ? "Simpan Perubahan Dokumen" : "Simpan & Unggah Peraturan"}</span>
                       </button>
                     </div>
                   </form>
@@ -1516,214 +1565,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         </div>
       )}
 
-      {/* ================================================================== */}
-      {/* MODAL 1: CRUD USER WITH MENU ACCESS CONTROL */}
-      {/* ================================================================== */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto animate-fadeIn">
-          <div id="user-crud-dialog" className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden transition-colors">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800 rounded-xl">
-                  <Edit3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Edit Pengguna &amp; Hak Akses</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Konfigurasi Hak Akses Menu dan Role Akun</p>
-                </div>
-              </div>
-              <button onClick={handleCloseModal} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-              {formError && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              {/* ID Input with 8 Char Limit */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">ID Pengguna / NIP (Tepat 8 Karakter)</label>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{formId.length}/8</span>
-                </div>
-                <input
-                  id="modal-input-user-id"
-                  type="text"
-                  maxLength={8}
-                  required
-                  disabled={!!editingUser}
-                  value={formId}
-                  onChange={(e) => setFormId(e.target.value.replace(/\s+/g, ""))}
-                  placeholder="Contoh: 19890422 (8 digit)"
-                  className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 font-mono text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 disabled:opacity-60 disabled:bg-slate-100 dark:disabled:bg-slate-850"
-                />
-              </div>
-
-              {/* Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Lengkap &amp; Gelar</label>
-                <input
-                  id="modal-input-name"
-                  type="text"
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Contoh: Dewi Lestari, S.E., M.M."
-                  className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                />
-              </div>
-
-              {/* Unit Dropdown */}
-              <div>
-                <label htmlFor="modal-select-unit" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Satuan Kerja / Unit Eselon <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  id="modal-select-unit"
-                  required
-                  value={formUnit}
-                  onChange={(e) => setFormUnit(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white cursor-pointer transition-colors"
-                >
-                  <option value="" disabled>
-                    -- Pilih Satuan Kerja / Unit Eselon --
-                  </option>
-                  {formUnit && !SATKER_UNIT_GROUPS.some((g) => g.options.includes(formUnit)) && <option value={formUnit}>{formUnit} (Unit Terdaftar)</option>}
-                  {SATKER_UNIT_GROUPS.map((group) => (
-                    <optgroup key={group.group} label={group.group} className="font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-850">
-                      {group.options.map((unitName) => (
-                        <option key={unitName} value={unitName} className="font-normal text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800">
-                          {unitName}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-
-              {/* Hak Akses Menu: View, Edit, atau Keduanya */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <Sliders className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                    <span>Pengaturan Hak Akses Menu (Role-Based Access Control)</span>
-                  </label>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                  Tentukan kewenangan akun pada menu: hanya bisa melihat (*view*), mengubah data (*edit*), atau keduanya (*both*).
-                </p>
-
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setFormMenuAccess("view")}
-                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                      formMenuAccess === "view"
-                        ? "bg-sky-50 dark:bg-sky-950/70 border-sky-500 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500 font-bold"
-                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100"
-                    }`}
-                  >
-                    <Eye className="w-4 h-4 mx-auto mb-1 text-sky-600" />
-                    <div className="text-xs font-bold">Hanya Lihat</div>
-                    <div className="text-[10px] text-slate-400">View Only</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormMenuAccess("edit")}
-                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                      formMenuAccess === "edit"
-                        ? "bg-amber-50 dark:bg-amber-950/70 border-amber-500 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500 font-bold"
-                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100"
-                    }`}
-                  >
-                    <Edit3 className="w-4 h-4 mx-auto mb-1 text-amber-600" />
-                    <div className="text-xs font-bold">Hanya Ubah</div>
-                    <div className="text-[10px] text-slate-400">Edit Only</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormMenuAccess("both")}
-                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                      formMenuAccess === "both"
-                        ? "bg-emerald-50 dark:bg-emerald-950/70 border-emerald-500 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500 font-bold"
-                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100"
-                    }`}
-                  >
-                    <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-emerald-600" />
-                    <div className="text-xs font-bold">Keduanya</div>
-                    <div className="text-[10px] text-slate-400">View &amp; Edit</div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Role: Single Dedicated Role Assignment */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-bold text-slate-900 dark:text-white">Role Akun Pengguna</label>
-                  <span className="text-[10px] text-cyan-700 dark:text-cyan-400 font-semibold">1 Role per Akun</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {(["superadmin", "satker", "verifikator"] as UserRole[]).map((r) => {
-                    const isChecked = formRoles.includes(r);
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => selectSingleRole(r)}
-                        className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                          isChecked
-                            ? "bg-cyan-50 dark:bg-cyan-950/70 border-cyan-500 text-cyan-700 dark:text-cyan-300 ring-1 ring-cyan-500"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100"
-                        }`}
-                      >
-                        <Shield className={`w-3.5 h-3.5 ${isChecked ? "text-cyan-600" : "text-slate-400"}`} />
-                        <span>{r === "superadmin" ? "Super Admin" : r === "satker" ? "Satker" : "Verifikator"}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Status Aktif */}
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status Akun Aktif:</span>
-                <input
-                  type="checkbox"
-                  checked={formIsActive}
-                  onChange={(e) => setFormIsActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-cyan-600 border-slate-300 dark:border-slate-700 focus:ring-cyan-500 cursor-pointer"
-                />
-              </div>
-
-              {/* Footer Buttons */}
-              <div className="pt-4 flex justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="h-10 px-4 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="h-10 px-5 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl shadow-md shadow-cyan-600/30 hover:shadow-lg transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Simpan Pengguna</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================================================================== */}
       {/* MODAL VALIDASI KONFIRMASI BUAT / EDIT USER */}
@@ -1792,172 +1634,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         </div>
       )}
 
-      {/* ================================================================== */}
-      {/* MODAL 2: FORM EDIT PERATURAN ACUAN AI (PDF) */}
-      {/* ================================================================== */}
-      {isRegModalOpen && editingReg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto animate-fadeIn">
-          <div
-            id="regulation-upload-dialog"
-            className="w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden transition-colors"
-          >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800 rounded-xl">
-                  <Edit3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Edit Dokumen Acuan dan Regulasi AI</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Standar Biaya Masukan &amp; Juknis Resmi Penelaahan AI</p>
-                </div>
-              </div>
-              <button onClick={() => setIsRegModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleRegulationSubmit} className="p-6 space-y-4">
-              {regError && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{regError}</span>
-                </div>
-              )}
-
-              {/* PDF File Upload Input */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Berkas Dokumen Peraturan (PDF) {!editingReg && <span className="text-rose-500">*</span>}</label>
-                <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-400 rounded-2xl p-4 text-center bg-slate-50/50 dark:bg-slate-800/40 transition-colors relative cursor-pointer">
-                  <input
-                    id="regulation-file-upload-input"
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    required={!editingReg && !regFileName}
-                    onChange={handleRegulationFileUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <div className="p-2.5 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800 rounded-xl">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    {regFileName ? (
-                      <div>
-                        <p className="text-xs font-bold text-cyan-700 dark:text-cyan-400">{regFileName}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Ukuran Berkas: {regFileSize || "Tersimpan"}</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Klik atau seret berkas PDF peraturan ke sini</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Mendukung format PDF resmi (Contoh: PMK No. 49/2023)</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Title */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Judul Lengkap Peraturan / Ketentuan <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={regTitle}
-                  onChange={(e) => setRegTitle(e.target.value)}
-                  placeholder="Contoh: PMK No. 49/PMK.02/2023 tentang Standar Biaya Masukan TA 2026"
-                  className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Requirement: "Kategori Dokumen ubah jadi kolom teks bukan drop down" */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kategori Dokumen <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={regCategory}
-                    onChange={(e) => setRegCategory(e.target.value)}
-                    placeholder="Contoh: Standar Biaya Masukan (SBM)"
-                    className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                  />
-                </div>
-
-                {/* Requirement: "tambahkan kolom Tanggal Dimasukkan" */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Tanggal Dimasukkan <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={regDateInserted}
-                    onChange={(e) => setRegDateInserted(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-mono"
-                  />
-                </div>
-
-                {/* Target Year */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Tahun Anggaran</label>
-                  <input
-                    type="text"
-                    value={regTargetYear}
-                    onChange={(e) => setRegTargetYear(e.target.value)}
-                    placeholder="2026"
-                    className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-mono placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                  />
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Deskripsi / Ringkasan Cakupan</label>
-                <textarea
-                  rows={3}
-                  value={regDescription}
-                  onChange={(e) => setRegDescription(e.target.value)}
-                  placeholder="Ringkasan cakupan tarif honorarium, konsumsi rapat, perjalanan dinas, standar BAS..."
-                  className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                />
-              </div>
-
-              {/* Active Toggle (Aktif / Tidak Aktif digunakan AI) */}
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  id="reg-checkbox-active"
-                  type="checkbox"
-                  checked={regIsActive}
-                  onChange={(e) => setRegIsActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-cyan-600 border-slate-300 dark:border-slate-700 focus:ring-cyan-500 cursor-pointer"
-                />
-                <label htmlFor="reg-checkbox-active" className="text-xs text-slate-700 dark:text-slate-300 font-medium cursor-pointer">
-                  Aktifkan sebagai rujukan penilaian AI saat ini
-                </label>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsRegModalOpen(false)}
-                  className="h-10 px-4 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="h-10 px-5 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl shadow-md shadow-cyan-600/30 hover:shadow-lg transition-all cursor-pointer"
-                >
-                  {editingReg ? "Simpan Perubahan Dokumen" : "Simpan & Unggah Peraturan"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* PDF PREVIEW MODAL */}
       <PdfPreviewModal

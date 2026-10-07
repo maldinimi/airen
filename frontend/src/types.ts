@@ -22,7 +22,7 @@ export type ActiveMenuKey =
 export const ROLE_PERMISSIONS_MATRIX: Record<StandardMenuKey, Record<UserRole, AccessPermission>> = {
   menu_users: { superadmin: "E", verifikator: "NONE", satker: "NONE" },
   menu_acuan: { superadmin: "E", verifikator: "E", satker: "V" },
-  menu_checklist: { superadmin: "E", verifikator: "E", satker: "V" },
+  menu_checklist: { superadmin: "E", verifikator: "E", satker: "E" },
   menu_master_ro: { superadmin: "E", verifikator: "E", satker: "V" },
   menu_rab_list: { superadmin: "E", verifikator: "V", satker: "E" },
 };

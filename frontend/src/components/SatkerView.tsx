@@ -20,11 +20,11 @@ import {
   Clock,
   FileText,
   ArrowRight,
-  X,
   Pencil,
   History,
   Tag,
   ArrowLeft,
+  Save,
 } from "lucide-react";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { VerifikatorView } from "./VerifikatorView";
@@ -74,8 +74,10 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
 }) => {
   const activeRegulations = regulations.filter((r) => r.isActive);
   const isReadOnly = ROLE_PERMISSIONS_MATRIX.menu_rab_list[activeRole] !== "E";
-  // Sub Tab state for Daftar RAB vs Form Pengajuan vs Detail Evaluasi & Reupload
-  const [activeRabSubTab, setActiveRabSubTab] = useState<"list" | "form" | "history" | "history_detail" | "reupload">(() => {
+  // Sub Tab state for Daftar RAB vs Form Pengajuan vs Detail Evaluasi & Reupload vs Edit vs Detail vs CRUD History
+  const [activeRabSubTab, setActiveRabSubTab] = useState<
+    "list" | "form" | "history" | "history_detail" | "reupload" | "edit" | "detail" | "crud_history"
+  >(() => {
     return activeMenu === "satker_form" ? "form" : "list";
   });
 
@@ -119,6 +121,9 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   const handleBackToDaftarRab = () => {
     setReviewHistorySubmission(null);
     setReviewHistoryDetailIndex(null);
+    setSelectedDetailSubmission(null);
+    setEditItem(null);
+    setHistoryLogItem(null);
     setActiveRabSubTab("list");
     onSelectMenu?.("satker_list");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -296,10 +301,11 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   useEffect(() => {
     if (activeMenu === "satker_form") {
       setActiveRabSubTab("form");
-    } else if (activeMenu === "satker_list") {
+    } else if (activeMenu === "satker_list" || activeMenu === "menu_rab_list") {
       setActiveRabSubTab("list");
-    } else if (activeMenu === "menu_rab_list") {
-      setActiveRabSubTab("list");
+      setSelectedDetailSubmission(null);
+      setEditItem(null);
+      setHistoryLogItem(null);
     }
   }, [activeMenu]);
 
@@ -341,6 +347,18 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
   const [editDeskripsi, setEditDeskripsi] = useState<string>(RAB_CATEGORY_OPTIONS[0].description);
   const [editTahunAnggaran, setEditTahunAnggaran] = useState("2026");
 
+  const handleOpenDetailSubmission = (sub: SubmissionData) => {
+    setSelectedDetailSubmission(sub);
+    setActiveRabSubTab("detail");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleOpenCrudHistory = (sub: SubmissionData) => {
+    setHistoryLogItem(sub);
+    setActiveRabSubTab("crud_history");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleOpenEdit = (sub: SubmissionData) => {
     setEditItem(sub);
     setEditFileName(sub.rabFileName);
@@ -348,6 +366,8 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
     setEditKategori(matched ? matched.value : (sub.kategori || sub.kategori1 || RAB_CATEGORY_OPTIONS[0].value));
     setEditDeskripsi(sub.deskripsi || (matched ? matched.description : RAB_CATEGORY_OPTIONS[0].description));
     setEditTahunAnggaran(sub.tahunAnggaran || "2026");
+    setActiveRabSubTab("edit");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleEditKategoriChange = (newVal: string) => {
@@ -389,6 +409,7 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       onUpdateSubmission(updatedSub);
     }
     setEditItem(null);
+    setActiveRabSubTab("list");
   };
 
   const handleConfirmDelete = () => {
@@ -397,6 +418,10 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       onDeleteSubmission(deleteCandidate.id);
     }
     setDeleteCandidate(null);
+    if (activeRabSubTab === "detail" && selectedDetailSubmission?.id === deleteCandidate.id) {
+      setSelectedDetailSubmission(null);
+      setActiveRabSubTab("list");
+    }
   };
 
   // ---------------------------------------------------------
@@ -917,9 +942,9 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                 <SubmissionTable
                   submissions={filteredSubmissions}
                   isReadOnly={isReadOnly}
-                  onOpenCrudHistory={setHistoryLogItem}
+                  onOpenCrudHistory={handleOpenCrudHistory}
                   onOpenReviewHistory={handleOpenReviewHistory}
-                  onOpenDetails={setSelectedDetailSubmission}
+                  onOpenDetails={handleOpenDetailSubmission}
                   onPreview={setHistoryPreviewItem}
                   onEdit={handleOpenEdit}
                   onDelete={setDeleteCandidate}
@@ -1293,8 +1318,13 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                       <input
                         id="input-tahun-anggaran"
                         type="text"
+                        inputMode="numeric"
+                        maxLength={4}
                         value={selectedTahunAnggaran}
-                        onChange={(e) => setSelectedTahunAnggaran(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                          setSelectedTahunAnggaran(val);
+                        }}
                         placeholder="Contoh: 2026"
                         className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-medium shadow-2xs"
                       />
@@ -1746,45 +1776,75 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       )}
 
       {/* ================================================================== */}
-      {/* MODAL: DETAIL SUBMISSION (READ)                                     */}
+      {/* VIEW SUB-TAB: DETAIL SUBMISSION (READ / FULL PAGE SUBVIEW)         */}
       {/* ================================================================== */}
-      {selectedDetailSubmission && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden transition-colors">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white">
+      {activeRabSubTab === "detail" && selectedDetailSubmission && (
+        <div className="space-y-6 sm:space-y-8 animate-fadeIn">
+          <div className="relative bg-white dark:bg-slate-900 border-2 border-cyan-500 dark:border-cyan-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm space-y-6 sm:space-y-7 transition-all">
+            {/* Outline Label Badge */}
+            <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-cyan-600 text-white border-cyan-400 select-none">
+              <FileText className="w-3.5 h-3.5" />
+              <span>DETAIL DOKUMEN &bull; INFORMASI LENGKAP &amp; TELAAH AI</span>
+            </div>
+
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 border border-cyan-200 dark:border-cyan-800">
+                <div className="p-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800">
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold">Informasi Detail Dokumen RAB</h3>
-                    <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-bold">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                      Informasi Detail Dokumen RAB
+                    </h3>
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-bold">
                       {selectedDetailSubmission.ticketNumber}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Diajukan pada {selectedDetailSubmission.submittedAt} &bull; {selectedDetailSubmission.satkerUserName}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Diajukan pada {selectedDetailSubmission.submittedAt} &bull; {selectedDetailSubmission.satkerUserName} ({selectedDetailSubmission.satkerUserId})
                   </p>
                 </div>
               </div>
+
               <button
                 type="button"
-                onClick={() => setSelectedDetailSubmission(null)}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 rounded-xl transition-colors cursor-pointer"
+                onClick={handleBackToDaftarRab}
+                className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors self-start sm:self-auto shrink-0 border border-slate-200 dark:border-slate-700"
               >
-                <X className="w-5 h-5" />
+                <ArrowLeft className="w-4 h-4" />
+                <span>Kembali ke Daftar RAB</span>
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5">
+            <div className="space-y-6 text-xs">
               {/* Status Banner */}
-              <div className="p-4 rounded-xl border flex items-center justify-between gap-3 text-xs bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700">
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Status Verifikasi:</span>
-                  <span className="font-bold text-sm text-slate-900 dark:text-white mt-0.5 block">{selectedDetailSubmission.verificationStatus}</span>
-                  {selectedDetailSubmission.verifikatorNotes && <p className="text-slate-600 dark:text-slate-300 mt-1">Catatan: {selectedDetailSubmission.verifikatorNotes}</p>}
+              <div className="p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700">
+                <div className="space-y-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Status Verifikasi Berkas:</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      selectedDetailSubmission.verificationStatus === "Diterima"
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300"
+                        : selectedDetailSubmission.verificationStatus === "Menunggu"
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300"
+                          : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300"
+                    }`}>
+                      {selectedDetailSubmission.verificationStatus}
+                    </span>
+                    {selectedDetailSubmission.verifiedAt && (
+                      <span className="text-slate-500 dark:text-slate-400 text-xs">
+                        pada {selectedDetailSubmission.verifiedAt}
+                      </span>
+                    )}
+                  </div>
+                  {selectedDetailSubmission.verifikatorNotes && (
+                    <p className="text-slate-600 dark:text-slate-300 mt-2 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <strong>Catatan Verifikator:</strong> {selectedDetailSubmission.verifikatorNotes}
+                    </p>
+                  )}
                 </div>
+
                 {(() => {
                   const detailCriteria = Array.isArray(selectedDetailSubmission.criteriaResults) ? selectedDetailSubmission.criteriaResults : [];
                   const detailTotal = detailCriteria.length > 0 ? detailCriteria.length : 20;
@@ -1792,143 +1852,190 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                     ? detailCriteria.filter((c) => c.status === "passed").length
                     : (selectedDetailSubmission.aiScore !== undefined ? Math.round((selectedDetailSubmission.aiScore / 100) * detailTotal) : (selectedDetailSubmission.aiStatus === "LOLOS" ? 20 : 0));
                   return (
-                    <span
-                      className={`px-3 py-1 rounded-full font-bold text-xs ${
-                        selectedDetailSubmission.aiStatus === "LOLOS"
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                          : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
-                      }`}
-                    >
-                      AI: {selectedDetailSubmission.aiStatus} ({detailPassed}/{detailTotal})
-                    </span>
+                    <div className="text-right sm:shrink-0">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Hasil Telaah AI (LLM):</span>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-bold text-xs border ${
+                          selectedDetailSubmission.aiStatus === "LOLOS"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300"
+                            : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300"
+                        }`}
+                      >
+                        AI: {selectedDetailSubmission.aiStatus} ({detailPassed}/{detailTotal} Kriteria)
+                      </span>
+                    </div>
                   );
                 })()}
               </div>
 
+              {/* TOR review if present */}
               {selectedDetailSubmission.torFileName && (
-                <section className="p-4 rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 space-y-2 text-xs">
-                  <h4 className="font-bold text-slate-900 dark:text-white">Dokumen TOR: {selectedDetailSubmission.torFileName}</h4>
+                <section className="p-4 sm:p-5 rounded-2xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 space-y-2 text-xs">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-violet-600" />
+                    <span>Dokumen TOR: {selectedDetailSubmission.torFileName}</span>
+                  </h4>
                   <p className="text-slate-700 dark:text-slate-300">
-                    Hasil telaah: {selectedDetailSubmission.torAiStatus || "Tidak tersedia"}
+                    Hasil telaah: <strong>{selectedDetailSubmission.torAiStatus || "Tidak tersedia"}</strong>
                     {typeof selectedDetailSubmission.torAiScore === "number" ? ` (${selectedDetailSubmission.torAiScore}%)` : ""}
                   </p>
                   {selectedDetailSubmission.torAiReason && <p className="text-slate-600 dark:text-slate-400">{selectedDetailSubmission.torAiReason}</p>}
-                  {selectedDetailSubmission.torCriteriaResults && (
-                    <ul className="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-1">
-                      {selectedDetailSubmission.torCriteriaResults.map((criterion) => (
-                        <li key={criterion.id}>
-                          <strong>{criterion.status === "passed" ? "Lolos" : "Perlu telaah"}:</strong> {criterion.text} — {criterion.notes}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </section>
               )}
 
               {/* Hierarchy and Categories */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider block text-[11px]">Hierarki Anggaran RKA-K/L</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider block text-xs border-b border-slate-200 dark:border-slate-700 pb-2">
+                    Hierarki Anggaran RKA-K/L
+                  </span>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Program:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">{selectedDetailSubmission.program}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedDetailSubmission.program || "-"}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Kegiatan:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">{selectedDetailSubmission.kegiatan}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedDetailSubmission.kegiatan || "-"}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">KRO &bull; RO:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
-                      {selectedDetailSubmission.kro} &bull; {selectedDetailSubmission.ro}
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">
+                      {selectedDetailSubmission.kro || "-"} &bull; {selectedDetailSubmission.ro || "-"}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Tahun Anggaran:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.tahunAnggaran || "2026"}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedDetailSubmission.tahunAnggaran || "2026"}</span>
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider block text-[11px]">Klasifikasi Kategori &amp; User Logging</span>
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider block text-xs border-b border-slate-200 dark:border-slate-700 pb-2">
+                    Klasifikasi Kategori &amp; User Logging
+                  </span>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Nama Berkas RAB (PDF):</span>
+                    <span className="font-bold text-cyan-700 dark:text-cyan-300 block mt-0.5">{selectedDetailSubmission.rabFileName}</span>
+                  </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Kategori:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.kategori || selectedDetailSubmission.kategori1 || "-"}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedDetailSubmission.kategori || selectedDetailSubmission.kategori1 || "-"}</span>
                   </div>
                   {selectedDetailSubmission.deskripsi && (
                     <div>
                       <span className="text-[10px] text-slate-400 uppercase font-semibold block">Deskripsi:</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.deskripsi}</span>
+                      <p className="text-slate-700 dark:text-slate-300 mt-0.5 leading-relaxed bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                        {selectedDetailSubmission.deskripsi}
+                      </p>
                     </div>
                   )}
-                  {selectedDetailSubmission.kategori2 && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Kategori 2 (Lama):</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.kategori2}</span>
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Created By:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.createdBy || selectedDetailSubmission.satkerUserName}</span>
                     </div>
-                  )}
-                  {selectedDetailSubmission.kategori3 && (
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Kategori 3 (Lama):</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.kategori3}</span>
-                    </div>
-                  )}
-                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Created By:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.createdBy || selectedDetailSubmission.satkerUserName}</span>
+                    {selectedDetailSubmission.updatedBy && (
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold block">Updated By:</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 block">{selectedDetailSubmission.updatedBy}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedDetailSubmission(null)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Tutup
-              </button>
+              {/* Bottom Buttons */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeleteCandidate(selectedDetailSubmission)}
+                  className="h-10 px-4 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Hapus Dokumen</span>
+                </button>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleBackToDaftarRab}
+                    className="h-10 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Kembali ke Daftar
+                  </button>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(selectedDetailSubmission)}
+                      className="h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      <span>Edit Metadata Dokumen</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* ================================================================== */}
-      {/* MODAL: EDIT DOKUMEN (UPDATE CRUD)                                  */}
+      {/* VIEW SUB-TAB: EDIT DOKUMEN (UPDATE CRUD / FULL PAGE SUBVIEW)       */}
       {/* ================================================================== */}
-      {editItem && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden transition-colors">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white">
-              <div className="flex items-center gap-2">
-                <Pencil className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                <h3 className="text-base font-bold">Edit Metadata Dokumen RAB</h3>
+      {activeRabSubTab === "edit" && editItem && (
+        <div className="space-y-6 sm:space-y-8 animate-fadeIn">
+          <div className="relative bg-white dark:bg-slate-900 border-2 border-cyan-500 dark:border-cyan-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm space-y-6 sm:space-y-7 transition-all">
+            {/* Outline Label Badge */}
+            <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-cyan-600 text-white border-cyan-400 select-none">
+              <Pencil className="w-3.5 h-3.5" />
+              <span>FORMULIR EDIT &bull; PEMBARUAN METADATA DOKUMEN RAB</span>
+            </div>
+
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  <span>Edit Metadata Dokumen RAB</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Perbarui nama berkas PDF, klasifikasi kategori, deskripsi, dan tahun anggaran untuk tiket: <strong className="font-mono text-cyan-600 dark:text-cyan-400">{editItem.ticketNumber}</strong>
+                </p>
               </div>
-              <button type="button" onClick={() => setEditItem(null)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400">
-                <X className="w-5 h-5" />
+
+              <button
+                type="button"
+                onClick={handleBackToDaftarRab}
+                className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors self-start sm:self-auto shrink-0 border border-slate-200 dark:border-slate-700"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Kembali ke Daftar RAB</span>
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSaveEdit} className="space-y-5 text-xs max-w-2xl">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Dokumen PDF</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Nama Dokumen PDF <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={editFileName}
                   onChange={(e) => setEditFileName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium"
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium shadow-2xs"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Kategori <span className="text-rose-500">*</span>
+                  </label>
                   <select
                     value={editKategori}
                     onChange={(e) => handleEditKategoriChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium cursor-pointer shadow-2xs"
                   >
                     {RAB_CATEGORY_OPTIONS.map((cat) => (
                       <option key={cat.value} value={cat.value}>
@@ -1939,40 +2046,51 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tahun Anggaran</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Tahun Anggaran (Maksimal 4 Angka)
+                  </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={4}
                     value={editTahunAnggaran}
-                    onChange={(e) => setEditTahunAnggaran(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setEditTahunAnggaran(val);
+                    }}
                     placeholder="Contoh: 2026"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium"
+                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium font-mono shadow-2xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Deskripsi <span className="text-slate-400 font-normal lowercase">(otomatis terisi)</span>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Deskripsi Kategori <span className="text-slate-400 font-normal lowercase">(otomatis terisi)</span>
                 </label>
-                <div className="w-full p-3 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 leading-relaxed min-h-[72px] select-text">
+                <div className="w-full p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 leading-relaxed min-h-[72px] select-text">
                   <p>{editDeskripsi || "Pilih kategori untuk memuat deskripsi..."}</p>
                 </div>
               </div>
 
-              <div className="pt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                Pembaruan ini akan dicatat ke dalam log history dengan akun pembaru: <strong className="text-slate-800 dark:text-slate-200">{currentUser.name}</strong>
+              <div className="p-3.5 bg-sky-50 dark:bg-sky-950/40 rounded-xl border border-sky-200 dark:border-sky-800 text-[11px] text-sky-800 dark:text-sky-300">
+                Pembaruan ini akan dicatat ke dalam log history audit trail dengan akun pembaru: <strong className="text-sky-900 dark:text-white">{currentUser.name} ({currentUser.id})</strong>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditItem(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer"
+                  onClick={handleBackToDaftarRab}
+                  className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs">
-                  Simpan Perubahan
+                <button
+                  type="submit"
+                  className="h-11 px-6 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-cyan-600/30"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Perubahan Dokumen</span>
                 </button>
               </div>
             </form>
@@ -2018,31 +2136,56 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
       )}
 
       {/* ================================================================== */}
-      {/* MODAL: LOG HISTORY CRUD FILE PDF (USER LOGGING AUDIT TRAIL)       */}
+      {/* VIEW SUB-TAB: LOG HISTORY CRUD FILE PDF (AUDIT TRAIL SUBVIEW)      */}
       {/* ================================================================== */}
-      {historyLogItem && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden transition-colors">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white">
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-                <h3 className="text-base font-bold">History CRUD Dokumen PDF</h3>
+      {activeRabSubTab === "crud_history" && historyLogItem && (
+        <div className="space-y-6 sm:space-y-8 animate-fadeIn">
+          <div className="relative bg-white dark:bg-slate-900 border-2 border-cyan-500 dark:border-cyan-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm space-y-6 sm:space-y-7 transition-all">
+            {/* Outline Label Badge */}
+            <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-cyan-600 text-white border-cyan-400 select-none">
+              <History className="w-3.5 h-3.5" />
+              <span>LOG HISTORY CRUD &bull; JEJAK AUDIT AKTIVITAS BERKAS</span>
+            </div>
+
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <History className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                  <span>History CRUD Dokumen PDF (User Logging Audit Trail)</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Catatan riwayat Create, Read, Update, Delete serta riwayat unggahan berkas untuk tiket: <strong className="font-mono text-cyan-600 dark:text-cyan-400">{historyLogItem.ticketNumber}</strong>
+                </p>
               </div>
-              <button type="button" onClick={() => setHistoryLogItem(null)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400">
-                <X className="w-5 h-5" />
+
+              <button
+                type="button"
+                onClick={handleBackToDaftarRab}
+                className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors self-start sm:self-auto shrink-0 border border-slate-200 dark:border-slate-700"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Kembali ke Daftar RAB</span>
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span className="font-bold text-slate-900 dark:text-white block">{historyLogItem.rabFileName}</span>
-                <span className="text-[11px] text-slate-500 font-mono mt-0.5 block">{historyLogItem.ticketNumber}</span>
+            <div className="space-y-6 max-w-3xl">
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 block font-semibold">Nama Berkas:</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white block mt-0.5">{historyLogItem.rabFileName}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 block font-semibold">Nomor Tiket:</span>
+                  <span className="text-xs font-mono font-bold text-cyan-600 dark:text-cyan-400 mt-0.5 block">{historyLogItem.ticketNumber}</span>
+                </div>
               </div>
 
               <div className="space-y-3">
-                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide block">Aktivitas Pengguna (User Logging):</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide block">
+                  Aktivitas Pengguna (User Logging Timeline):
+                </span>
 
-                <div className="border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-800/40 overflow-hidden">
                   {(historyLogItem.auditTrail && historyLogItem.auditTrail.length > 0
                     ? historyLogItem.auditTrail
                     : [
@@ -2054,10 +2197,10 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                         },
                       ]
                   ).map((entry, i) => (
-                    <div key={i} className="p-3.5 space-y-1">
+                    <div key={i} className="p-4 space-y-1.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/60 transition-colors">
                       <div className="flex items-center justify-between">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold tracking-wider ${
                             entry.action === "CREATE"
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                               : entry.action === "UPDATE"
@@ -2067,22 +2210,22 @@ export const SatkerView: React.FC<SatkerViewProps> = ({
                         >
                           {entry.action}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono">{entry.timestamp}</span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{entry.timestamp}</span>
                       </div>
-                      <div className="font-semibold text-slate-900 dark:text-white mt-1">Oleh: {entry.performedBy}</div>
-                      {entry.details && <p className="text-[11px] text-slate-500 dark:text-slate-400">{entry.details}</p>}
+                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-1">Oleh: {entry.performedBy}</div>
+                      {entry.details && <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{entry.details}</p>}
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setHistoryLogItem(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer"
+                  onClick={handleBackToDaftarRab}
+                  className="h-10 px-5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                 >
-                  Tutup
+                  Kembali ke Daftar RAB
                 </button>
               </div>
             </div>

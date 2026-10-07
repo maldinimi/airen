@@ -57,6 +57,8 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
   regulations = [],
 }) => {
   const isEditable = permission === "E";
+  // Master checklist selalu mendukung aksi CRUD penuh (Create, Read, Update, Delete)
+  const canManageChecklist = true;
 
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -215,54 +217,54 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
     }
   }, [checklistCriteria]);
 
-  // Sub-view: "table" (Tabel Checklist) or "form" (Halaman Form Input Checklist Baru)
-  const [checklistSubView, setChecklistSubView] = useState<"table" | "form">("table");
+  // Sub-view: "table" (Tabel Checklist) or "form" (Halaman Input/Edit Checklist) or "detail" (Halaman Detail Kriteria)
+  const [checklistSubView, setChecklistSubView] = useState<"table" | "form" | "detail">("table");
   const [checklistSearch, setChecklistSearch] = useState("");
 
-  // Form Input Checklist Baru State
-  // Sesuai Instruksi:
-  // a. No (otomatis berurutan berikutnya)
-  // b. Kriteria (Teks)
-  // c. Deskripsi (Teks)
-  // d. Aktif dan Tidak Aktif serta Aksi (CRUD) HANYA muncul di tabel saja!
   const nextCriterionNo = checklistCriteria.length + 1;
   const [inputKriteriaText, setInputKriteriaText] = useState("");
   const [inputDeskripsiText, setInputDeskripsiText] = useState("");
   const [formChecklistError, setFormChecklistError] = useState<string | null>(null);
   const [checklistSavedBanner, setChecklistSavedBanner] = useState<string | null>(null);
 
-  // CRUD Modals for Master Criteria Table
+  // CRUD States for Master Criteria
   const [viewCriterion, setViewCriterion] = useState<MasterCriterion | null>(null);
   const [editCriterion, setEditCriterion] = useState<MasterCriterion | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<MasterCriterion | null>(null);
 
-  // Edit form state
-  const [editKriteriaText, setEditKriteriaText] = useState("");
-  const [editDeskripsiText, setEditDeskripsiText] = useState("");
-
-  const handleOpenEdit = (criterion: MasterCriterion) => {
-    setEditCriterion(criterion);
-    setEditKriteriaText(criterion.text);
-    setEditDeskripsiText(criterion.description);
+  // Buka Halaman Tambah Baru (Halaman Baru)
+  const handleOpenAdd = () => {
+    setEditCriterion(null);
+    setInputKriteriaText("");
+    setInputDeskripsiText("");
+    setFormChecklistError(null);
+    setChecklistSubView("form");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editCriterion) return;
-    if (!editKriteriaText.trim()) return;
+  // Buka Halaman Edit (Halaman Baru)
+  const handleOpenEdit = (criterion: MasterCriterion) => {
+    setEditCriterion(criterion);
+    setInputKriteriaText(criterion.text);
+    setInputDeskripsiText(criterion.description);
+    setFormChecklistError(null);
+    setChecklistSubView("form");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    setChecklistCriteria((prev) =>
-      prev.map((c) =>
-        c.id === editCriterion.id
-          ? {
-              ...c,
-              text: editKriteriaText.trim(),
-              description: editDeskripsiText.trim(),
-            }
-          : c,
-      ),
-    );
+  // Buka Halaman Detail (Halaman Baru)
+  const handleOpenDetail = (criterion: MasterCriterion) => {
+    setViewCriterion(criterion);
+    setChecklistSubView("detail");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCloseForm = () => {
     setEditCriterion(null);
+    setInputKriteriaText("");
+    setInputDeskripsiText("");
+    setFormChecklistError(null);
+    setChecklistSubView("table");
   };
 
   const handleConfirmDelete = () => {
@@ -276,13 +278,16 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
       }));
     });
     setDeleteCandidate(null);
+    if (checklistSubView === "detail") {
+      setChecklistSubView("table");
+    }
   };
 
   const handleToggleCriterionActive = (id: number) => {
     setChecklistCriteria((prev) => prev.map((c) => (c.id === id ? { ...c, isActive: !c.isActive } : c)));
   };
 
-  // Submit Handler for New Checklist Form (Halaman Baru)
+  // Submit Handler for Checklist Form (Halaman Baru - Tambah maupun Edit)
   const handleSubmitNewChecklist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputKriteriaText.trim()) {
@@ -296,18 +301,35 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
 
     setFormChecklistError(null);
 
-    const newCriterion: MasterCriterion = {
-      id: checklistCriteria.length + 1,
-      text: inputKriteriaText.trim(),
-      description: inputDeskripsiText.trim(),
-      isActive: true, // Default aktif di tabel
-    };
+    if (editCriterion) {
+      setChecklistCriteria((prev) =>
+        prev.map((c) =>
+          c.id === editCriterion.id
+            ? {
+                ...c,
+                text: inputKriteriaText.trim(),
+                description: inputDeskripsiText.trim(),
+              }
+            : c,
+        ),
+      );
+      setChecklistSavedBanner(`Perubahan Kriteria No. ${editCriterion.id} berhasil disimpan!`);
+      setEditCriterion(null);
+    } else {
+      const newCriterion: MasterCriterion = {
+        id: checklistCriteria.length + 1,
+        text: inputKriteriaText.trim(),
+        description: inputDeskripsiText.trim(),
+        isActive: true, // Default aktif di tabel
+      };
 
-    setChecklistCriteria((prev) => [...prev, newCriterion]);
+      setChecklistCriteria((prev) => [...prev, newCriterion]);
+      setChecklistSavedBanner(`Kriteria baru No. ${newCriterion.id} berhasil ditambahkan ke daftar checklist!`);
+    }
+
     setInputKriteriaText("");
     setInputDeskripsiText("");
     setChecklistSubView("table");
-    setChecklistSavedBanner(`Kriteria baru No. ${newCriterion.id} berhasil ditambahkan ke daftar checklist!`);
     setTimeout(() => setChecklistSavedBanner(null), 4000);
   };
 
@@ -322,8 +344,8 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
 
   return (
     <div className="space-y-10 sm:space-y-12">
-      {/* View Only Banner (for Satker) - Disembunyikan saat membuka form checklist */}
-      {!isEditable && !(isChecklistMenu && checklistSubView === "form") && (
+      {/* View Only Banner (for Satker) - Disembunyikan pada halaman master checklist */}
+      {!isEditable && !isChecklistMenu && (
         <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-2xl p-4.5 flex items-start gap-3.5 text-sky-900 dark:text-sky-200 shadow-2xs">
           <div className="p-2 rounded-xl bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 shrink-0">
             <Info className="w-5 h-5" />
@@ -761,17 +783,12 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Halaman ini bertujuan untuk mengelola list pertanyaan yang akan diperiksa oleh mesin AI dan pejabat verifikator.</p>
                 </div>
 
-                {/* Tombol Masukkan Checklist Baru */}
-                {isEditable && (
+                {/* Tombol Masukkan Checklist Baru (Create - Halaman Baru) */}
+                {canManageChecklist && (
                   <button
                     id="btn-tambah-checklist-baru"
                     type="button"
-                    onClick={() => {
-                      setInputKriteriaText("");
-                      setInputDeskripsiText("");
-                      setFormChecklistError(null);
-                      setChecklistSubView("form");
-                    }}
+                    onClick={handleOpenAdd}
                     className="h-10 px-5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer ring-1 ring-cyan-500 self-start sm:self-auto shrink-0"
                   >
                     <PlusCircle className="w-4 h-4" />
@@ -834,72 +851,55 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                               <span className="text-slate-600 dark:text-slate-300 block leading-relaxed">{item.description}</span>
                             </td>
 
-                            {/* Aktif dan Tidak Aktif */}
+                            {/* Aktif dan Tidak Aktif (Toggle Update) */}
                             <td className="px-4 py-4 text-center">
-                              {isEditable ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleCriterionActive(item.id)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                                    item.isActive
-                                      ? "bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
-                                      : "bg-slate-200 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
-                                  }`}
-                                  title="Klik untuk mengubah status aktif kriteria"
-                                >
-                                  {item.isActive ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
-                                  <span>{item.isActive ? "Aktif" : "Tidak Aktif"}</span>
-                                </button>
-                              ) : (
-                                <span
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold select-none ${
-                                    item.isActive
-                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
-                                      : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300"
-                                  }`}
-                                >
-                                  {item.isActive ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
-                                  <span>{item.isActive ? "Aktif" : "Tidak Aktif"}</span>
-                                </span>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCriterionActive(item.id)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                  item.isActive
+                                    ? "bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                                    : "bg-slate-200 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
+                                }`}
+                                title="Klik untuk mengubah status aktif/non-aktif kriteria"
+                              >
+                                {item.isActive ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                                <span>{item.isActive ? "Aktif" : "Tidak Aktif"}</span>
+                              </button>
                             </td>
 
                             {/* Aksi (CRUD) */}
                             <td className="px-4 py-4 text-center">
                               <div className="flex items-center justify-center gap-1.5">
-                                {/* Read / View */}
+                                {/* Read / View (Halaman Baru) */}
                                 <button
                                   type="button"
-                                  onClick={() => setViewCriterion(item)}
+                                  onClick={() => handleOpenDetail(item)}
                                   className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
-                                  title="Lihat Detail Kriteria"
+                                  title="Lihat Detail Kriteria (Read)"
                                 >
                                   <Eye className="w-4 h-4" />
                                 </button>
 
-                                {isEditable && (
-                                  <>
-                                    {/* Edit */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenEdit(item)}
-                                      className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer border border-amber-200 dark:border-amber-800"
-                                      title="Edit Kriteria & Deskripsi"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
+                                {/* Edit / Update (Halaman Baru) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(item)}
+                                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer border border-amber-200 dark:border-amber-800"
+                                  title="Edit Kriteria & Deskripsi (Update)"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
 
-                                    {/* Delete */}
-                                    <button
-                                      type="button"
-                                      onClick={() => setDeleteCandidate(item)}
-                                      className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 transition-colors cursor-pointer border border-rose-200 dark:border-rose-800"
-                                      title="Hapus Kriteria"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
-                                )}
+                                {/* Delete */}
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteCandidate(item)}
+                                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 transition-colors cursor-pointer border border-rose-200 dark:border-rose-800"
+                                  title="Hapus Kriteria (Delete)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -912,30 +912,32 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
             </div>
           )}
 
-          {/* MODE B: HALAMAN FORM INPUT CHECKLIST BARU */}
+          {/* MODE B: HALAMAN FORM INPUT / EDIT CHECKLIST (HALAMAN BARU) */}
           {checklistSubView === "form" && (
             <div className="relative bg-white dark:bg-slate-900 border-2 border-emerald-500 dark:border-emerald-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm space-y-6 transition-all animate-fadeIn">
               {/* Outline Label Badge */}
               <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-emerald-600 text-white border-emerald-400 select-none">
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>FORMULIR CHECKLIST BARU &bull; INPUT PERTANYAAN PEMERIKSAAN</span>
+                {editCriterion ? <Pencil className="w-3.5 h-3.5" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                <span>{editCriterion ? "FORMULIR EDIT • UBAH PERTANYAAN PEMERIKSAAN" : "FORMULIR CHECKLIST BARU • INPUT PERTANYAAN PEMERIKSAAN"}</span>
               </div>
 
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex items-center justify-between">
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <PlusCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                    <span>Masukkan Checklist Baru Pemeriksaan Dokumen RAB</span>
+                    {editCriterion ? <Pencil className="w-5 h-5 text-amber-600 dark:text-amber-400" /> : <PlusCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+                    <span>{editCriterion ? `Edit Kriteria No. ${editCriterion.id} Pemeriksaan Dokumen RAB` : "Masukkan Checklist Baru Pemeriksaan Dokumen RAB"}</span>
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Isi kriteria pertanyaan dan deskripsi panduan evaluasi. Status aktif dan aksi CRUD akan tersedia pada tabel setelah disimpan.
+                    {editCriterion
+                      ? "Perbarui kriteria pertanyaan dan deskripsi panduan evaluasi kriteria ini."
+                      : "Isi kriteria pertanyaan dan deskripsi panduan evaluasi. Status aktif dan aksi CRUD akan tersedia pada tabel setelah disimpan."}
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setChecklistSubView("table")}
-                  className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  onClick={handleCloseForm}
+                  className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors self-start sm:self-auto shrink-0"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Kembali ke Tabel</span>
@@ -964,13 +966,15 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                   <div className="relative">
                     <input
                       type="text"
-                      value={`Nomor Kriteria #${nextCriterionNo}`}
+                      value={editCriterion ? `Nomor Kriteria #${editCriterion.id}` : `Nomor Kriteria #${nextCriterionNo}`}
                       readOnly
                       disabled
                       className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-700 dark:text-slate-300 cursor-not-allowed"
                     />
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">Nomor urut kriteria otomatis digenerate berikutnya oleh sistem.</span>
+                  <span className="text-[11px] text-slate-400 mt-1 block">
+                    {editCriterion ? "Nomor urut kriteria yang sedang diubah." : "Nomor urut kriteria otomatis digenerate berikutnya oleh sistem."}
+                  </span>
                 </div>
 
                 {/* b. Kriteria (Teks) */}
@@ -1015,7 +1019,7 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setChecklistSubView("table")}
+                    onClick={handleCloseForm}
                     className="h-11 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
                   >
                     Batal
@@ -1025,114 +1029,135 @@ export const VerifikatorView: React.FC<VerifikatorViewProps> = ({
                     className="h-11 px-7 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all"
                   >
                     <Save className="w-4 h-4" />
-                    <span>Simpan Checklist Baru</span>
+                    <span>{editCriterion ? "Simpan Perubahan Kriteria" : "Simpan Checklist Baru"}</span>
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* MODAL VIEW CRITERION */}
-          {viewCriterion && (
-            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4 transition-colors">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">No. {viewCriterion.id}</span>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Detail Kriteria Checklist</h3>
+          {/* MODE C: HALAMAN DETAIL KRITERIA CHECKLIST (READ / FULL PAGE) */}
+          {checklistSubView === "detail" && viewCriterion && (
+            <div className="relative bg-white dark:bg-slate-900 border-2 border-cyan-500 dark:border-cyan-500 rounded-2xl p-6 sm:p-8 pt-8 sm:pt-9 shadow-sm space-y-6 transition-all animate-fadeIn">
+              {/* Outline Label Badge */}
+              <div className="absolute -top-3.5 left-5 sm:left-6 z-10 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm border bg-cyan-600 text-white border-cyan-400 select-none">
+                <Eye className="w-3.5 h-3.5" />
+                <span>DETAIL KRITERIA • INFORMASI LENGKAP CHECKLIST</span>
+              </div>
+
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-extrabold px-3 py-1 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800">
+                    Kriteria No. {viewCriterion.id}
+                  </span>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Detail Kriteria Pemeriksaan Dokumen RAB
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Pratinjau lengkap isi kriteria dan panduan telaah verifikator.
+                    </p>
                   </div>
-                  <button type="button" onClick={() => setViewCriterion(null)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400">
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
 
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Kriteria:</span>
-                    <p className="font-semibold text-slate-900 dark:text-white mt-1 text-sm">{viewCriterion.text}</p>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewCriterion(null);
+                    setChecklistSubView("table");
+                  }}
+                  className="h-9 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors self-start sm:self-auto shrink-0"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Kembali ke Tabel</span>
+                </button>
+              </div>
 
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Deskripsi:</span>
-                    <p className="text-slate-700 dark:text-slate-300 mt-1 leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="space-y-5 text-xs max-w-3xl">
+                <div>
+                  <span className="text-[11px] text-slate-400 uppercase font-bold tracking-wider block">
+                    Kriteria / Pertanyaan Pemeriksaan:
+                  </span>
+                  <div className="mt-1.5 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base leading-relaxed">
+                      {viewCriterion.text}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[11px] text-slate-400 uppercase font-bold tracking-wider block">
+                    Deskripsi / Panduan Evaluasi &amp; Dasar Penelaahan:
+                  </span>
+                  <div className="mt-1.5 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed text-xs sm:text-sm whitespace-pre-wrap">
                       {viewCriterion.description}
                     </p>
                   </div>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Status Penggunaan:</span>
-                    <span className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold ${viewCriterion.isActive ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>
-                      {viewCriterion.isActive ? "Aktif Digunakan AI & Verifikator" : "Tidak Aktif (Diarsipkan)"}
+                <div>
+                  <span className="text-[11px] text-slate-400 uppercase font-bold tracking-wider block">
+                    Status Penggunaan AI &amp; Verifikator:
+                  </span>
+                  <div className="mt-1.5">
+                    <span
+                      className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold border ${
+                        viewCriterion.isActive
+                          ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 border-slate-300 dark:border-slate-700"
+                      }`}
+                    >
+                      {viewCriterion.isActive ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                      <span>{viewCriterion.isActive ? "Aktif Digunakan AI & Verifikator" : "Tidak Aktif (Diarsipkan)"}</span>
                     </span>
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                {/* Tombol Aksi CRUD di Halaman Detail */}
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={() => setViewCriterion(null)}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer"
+                    onClick={() => {
+                      const target = viewCriterion;
+                      setDeleteCandidate(target);
+                    }}
+                    className="h-10 px-4 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
                   >
-                    Tutup
+                    <Trash2 className="w-4 h-4" />
+                    <span>Hapus Kriteria</span>
                   </button>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* MODAL EDIT CRITERION */}
-          {editCriterion && (
-            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4 transition-colors">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <Pencil className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Edit Kriteria No. {editCriterion.id}</h3>
-                  </div>
-                  <button type="button" onClick={() => setEditCriterion(null)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kriteria (Teks)</label>
-                    <input
-                      type="text"
-                      value={editKriteriaText}
-                      onChange={(e) => setEditKriteriaText(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deskripsi (Teks)</label>
-                    <textarea
-                      rows={4}
-                      value={editDeskripsiText}
-                      onChange={(e) => setEditDeskripsiText(e.target.value)}
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 leading-relaxed"
-                      required
-                    />
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
+                  <div className="flex items-center gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setEditCriterion(null)}
-                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer"
+                      onClick={() => {
+                        setViewCriterion(null);
+                        setChecklistSubView("table");
+                      }}
+                      className="h-10 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                     >
-                      Batal
+                      Kembali ke Tabel
                     </button>
-                    <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs">
-                      Simpan Perubahan
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = viewCriterion;
+                        setViewCriterion(null);
+                        handleOpenEdit(target);
+                      }}
+                      className="h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      <span>Edit Kriteria Ini</span>
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
             </div>
           )}
+
+
 
           {/* MODAL DELETE CRITERION CONFIRMATION */}
           {deleteCandidate && (
