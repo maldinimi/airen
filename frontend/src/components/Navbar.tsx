@@ -1,101 +1,145 @@
-import React from "react";
-import { UserAccount, UserRole } from "../types";
-import { KeyRound, LogOut, Sun, Moon, Menu } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { UserAccount, UserRole, ActiveMenuKey } from "../types";
+import { KeyRound, LogOut, Sun, Moon, Menu, ChevronDown } from "lucide-react";
+import { getPageMetaForMenu } from "../utils/navigation";
 
 interface NavbarProps {
   currentUser: UserAccount;
   activeRole: UserRole;
+  activeMenu: ActiveMenuKey;
   theme: "light" | "dark";
   onToggleTheme: () => void;
-  onToggleMobileSidebar: () => void;
+  onOpenMobileSidebar: () => void;
   onOpenChangePassword: () => void;
   onLogout: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentUser, activeRole, theme, onToggleTheme, onToggleMobileSidebar, onOpenChangePassword, onLogout }) => {
-  const getRoleBadgeColor = (role: UserRole) => {
-    switch (role) {
-      case "superadmin":
-        return "bg-cyan-600 text-white";
-      case "satker":
-        return "bg-blue-600 text-white";
-      case "verifikator":
-        return "bg-emerald-600 text-white";
-    }
-  };
+const ROLE_DISPLAY_NAME: Record<UserRole, string> = {
+  superadmin: "Super Admin",
+  verifikator: "ROCAN (verif)",
+  satker: "Satuan Kerja",
+};
 
-  const getRoleDisplayName = (role: UserRole) => {
-    switch (role) {
-      case "superadmin":
-        return "Super Admin";
-      case "satker":
-        return "Satker";
-      case "verifikator":
-        return "ROCAN (verif)";
-    }
-  };
+export const Navbar: React.FC<NavbarProps> = ({
+  currentUser,
+  activeRole,
+  activeMenu,
+  theme,
+  onToggleTheme,
+  onOpenMobileSidebar,
+  onOpenChangePassword,
+  onLogout,
+}) => {
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const pageMeta = getPageMetaForMenu(activeMenu);
+
+  // Tutup dropdown profil bila klik di luar area tombolnya
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-sky-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xs transition-colors">
-      <div className="w-full min-w-0 px-2 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Left: App Identity (Pojok Kiri Atas) */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md print:hidden transition-colors">
+      <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        {/* Left: Page Identity */}
+        <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={onToggleMobileSidebar}
-            className="md:hidden shrink-0 p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            aria-label="Buka menu navigasi"
-            title="Buka menu navigasi"
+            onClick={onOpenMobileSidebar}
+            className="lg:hidden p-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer shrink-0"
+            title="Buka Menu Navigasi"
+            aria-label="Buka Menu Navigasi"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <img src="/logo-komdigi-emblem.svg" alt="Logo Kementerian Komunikasi dan Digital RI" className="w-8 h-8 sm:w-10 sm:h-10 object-contain drop-shadow-xs shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <h1 className="min-w-0 truncate text-xs sm:text-base font-extrabold text-slate-900 dark:text-white tracking-tight">Sistem Pengecekan File RAB AI</h1>
-              <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">v2.6</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight truncate">{pageMeta.title}</h1>
             </div>
-            <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs sm:max-w-md">Kementerian Komunikasi dan Digital RI &bull; Telaah Anggaran Berbasis LLM</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate hidden sm:block">{pageMeta.subtitle}</p>
           </div>
         </div>
 
-        {/* Right: Actions, Single Role Badge & User Profile */}
-        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-          {/* Theme Toggle Button (Light / Dark Mode) */}
+        {/* Right: Theme Toggle, Help, User Menu */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             id="btn-toggle-theme"
             type="button"
             onClick={onToggleTheme}
-            className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all shadow-2xs cursor-pointer flex items-center justify-center"
-            title={theme === "dark" ? "Beralih ke Mode Terang (Light Mode)" : "Beralih ke Mode Gelap (Dark Mode)"}
+            className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all shadow-sm cursor-pointer flex items-center justify-center hover:shadow"
+            title={theme === "dark" ? "Beralih ke Mode Terang" : "Beralih ke Mode Gelap"}
             aria-label="Toggle Dark Mode"
           >
             {theme === "dark" ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
           </button>
 
-          {/* Single Dedicated Role Indicator (No Multi-Role Switcher) */}
-          <span className={`hidden sm:inline-flex px-2.5 py-1 rounded-lg text-xs font-bold ${getRoleBadgeColor(activeRole)}`}>{getRoleDisplayName(activeRole)}</span>
-
-          {/* Change Password (for SatKer, Verifikator, SuperAdmin) */}
-          <button
-            id="btn-nav-change-password"
-            onClick={onOpenChangePassword}
-            className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-            title="Ganti Password Akun"
-          >
-            <KeyRound className="w-4 h-4" />
-          </button>
-
-          {/* User Info & Logout */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-            <div className="text-right hidden lg:block">
-              <span className="text-xs font-bold text-slate-900 dark:text-white block truncate max-w-44">{currentUser.name}</span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">NIP: {currentUser.id}</span>
-            </div>
-
-            <button id="btn-logout" onClick={onLogout} className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer" title="Keluar dari Sistem">
-              <LogOut className="w-4 h-4" />
+          {/* User Profile Dropdown */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsUserMenuOpen((prev) => !prev)}
+              className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              aria-haspopup="menu"
+              aria-expanded={isUserMenuOpen}
+            >
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold shadow-md shrink-0">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="text-left hidden sm:block">
+                <span className="text-xs font-bold text-slate-900 dark:text-white block truncate max-w-44">{currentUser.name}</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate max-w-44">{ROLE_DISPLAY_NAME[activeRole]}</span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isUserMenuOpen ? "rotate-180" : ""}`} />
             </button>
+
+            {isUserMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 py-2 z-50"
+              >
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                  <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{currentUser.name}</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">NIP: {currentUser.id}</div>
+                  <div className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{currentUser.unit}</div>
+                </div>
+
+                <div className="py-1">
+                  <button
+                    id="btn-nav-change-password"
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      onOpenChangePassword();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-4 h-4 text-slate-400" />
+                    <span>Ganti Password</span>
+                  </button>
+                  <button
+                    id="btn-logout"
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-400" />
+                    <span>Keluar</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

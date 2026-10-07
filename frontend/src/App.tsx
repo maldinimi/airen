@@ -202,28 +202,17 @@ export default function App() {
   const currentPermission = ROLE_PERMISSIONS_MATRIX[stdKey]?.[activeRole] || "NONE";
 
   return (
-    <div className="min-h-screen bg-sky-100/75 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 antialiased">
-      {/* Top Navigation Bar */}
-      <Navbar
-        currentUser={currentUser}
-        activeRole={activeRole}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)}
-        onOpenChangePassword={() => setIsPasswordModalOpen(true)}
-        onLogout={handleLogout}
-      />
+    <div className="h-screen bg-sky-100/75 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex font-sans transition-colors duration-200 antialiased overflow-hidden">
+      {/* Overlay gelap saat sidebar terbuka di layar kecil */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
 
-      {/* Dashboard Layout: Sidebar di sebelah kiri + MainContent di sebelah kanan */}
-      <div className="flex-1 flex min-w-0 overflow-visible md:overflow-hidden">
-        {isMobileSidebarOpen && (
-          <button
-            type="button"
-            aria-label="Tutup menu navigasi"
-            onClick={() => setIsMobileSidebarOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/50 md:hidden"
-          />
-        )}
+      <div
+        className={`fixed lg:relative inset-y-0 left-0 z-50 lg:z-30 transform transition-transform duration-300 ease-in-out h-full ${
+          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        } ${isMobileSidebarOpen ? "visible" : "invisible lg:visible"} ${isSidebarCollapsed ? "hidden lg:block" : "block"}`}
+      >
         {/* Sidebar Navigasi Dinamis Berdasarkan Role (Super Admin, ROCAN, Satker) */}
         <Sidebar
           activeRole={activeRole}
@@ -233,22 +222,39 @@ export default function App() {
             setIsMobileSidebarOpen(false);
           }}
           isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          isMobileOpen={isMobileSidebarOpen}
-          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          onToggleCollapse={() => {
+            if (window.innerWidth < 1024) {
+              setIsMobileSidebarOpen((prev) => !prev);
+            } else {
+              setIsSidebarCollapsed((prev) => !prev);
+            }
+          }}
           currentUser={currentUser}
           counts={{
             users: users.length,
             regulations: regulations.filter((r) => r.isActive).length,
             submissions: submissions.length,
+            pendingSubmissions: submissions.filter((s) => s.verificationStatus === "Menunggu").length,
             criteria: 20,
             masterRo: masterRoList.length,
           }}
         />
+      </div>
 
-        {/* MainContent: Area Dinamis Menampilkan Isi Halaman Sesuai Matriks Hak Akses (E & V) */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      {/* MainContent: Area Dinamis Menampilkan Isi Halaman Sesuai Matriks Hak Akses (E & V) */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <Navbar
+          currentUser={currentUser}
+          activeRole={activeRole}
+          activeMenu={activeMenu}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+          onOpenChangePassword={() => setIsPasswordModalOpen(true)}
+          onLogout={handleLogout}
+        />
+
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
             {currentPermission === "NONE" ? (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
                 <p className="font-bold text-sm text-slate-700 dark:text-slate-300">Anda tidak memiliki hak akses ke modul menu ini.</p>
@@ -344,13 +350,7 @@ export default function App() {
                 </>
               </Suspense>
             )}
-          </main>
-
-          {/* Clean Minimalist Footer */}
-          <footer className="border-t border-sky-200/80 dark:border-slate-800/80 py-4 text-center text-xs text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xs transition-colors">
-            Sistem Verifikasi &amp; Telaah Otomatis File RAB Berbasis AI &bull; Kementerian Komunikasi dan Digital Republik Indonesia &bull; 2026
-          </footer>
-        </div>
+        </main>
       </div>
 
       {/* Modals */}

@@ -90,22 +90,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, theme = "light", on
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        {/* Brand Header */}
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <img
-              src="/logo-komdigi-emblem.svg"
-              alt="Logo Kementerian Komunikasi dan Digital RI"
-              className="w-14 h-14 sm:w-16 sm:h-16 object-contain drop-shadow-xs transition-transform hover:scale-105"
-            />
+        {/* Single Card: Brand Header + Login Form + Demo Access digabung dalam satu kartu */}
+        <div className="bg-white dark:bg-slate-900 border border-sky-200/90 dark:border-slate-800 rounded-2xl shadow-md shadow-sky-900/5 p-6 sm:p-8 transition-colors">
+          {/* Brand Header */}
+          <div className="text-center mb-6">
+            <div className="flex justify-center mb-3">
+              <img
+                src="/logo-komdigi-emblem.svg"
+                alt="Logo Kementerian Komunikasi dan Digital RI"
+                className="w-14 h-14 sm:w-16 sm:h-16 object-contain drop-shadow-xs transition-transform hover:scale-105"
+              />
+            </div>
+
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Selamat Datang</h1>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Sistem Verifikasi &amp; Telaah Dokumen Anggaran (RAB) Komdigi RI</p>
           </div>
 
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Selamat Datang</h1>
-          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Sistem Verifikasi &amp; Telaah Dokumen Anggaran (RAB) Komdigi RI</p>
-        </div>
-
-        {/* Clean Card matching Sky Blue Theme */}
-        <div className="bg-white dark:bg-slate-900 border border-sky-200 dark:border-slate-800 rounded-2xl shadow-xl shadow-sky-950/10 p-6 sm:p-8 transition-colors">
           <form className="space-y-4" onSubmit={handleSubmit}>
             {/* Error Message */}
             {errorMessage && (
@@ -219,16 +219,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, theme = "light", on
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Footer info */}
-        <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-6">Kementerian Komunikasi dan Digital Republik Indonesia &bull; 2026</p>
+          {/* Footer info, di dalam card yang sama */}
+          <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-6">Kementerian Komunikasi dan Digital Republik Indonesia &bull; 2026</p>
+        </div>
       </div>
 
       {/* "Lupa Password? Hubungi Admin" Modal */}
       {showHelpModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 text-slate-900 dark:text-slate-100 shadow-xl space-y-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 text-slate-900 dark:text-slate-100 shadow-xl space-y-4 animate-scaleUp">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400">
                 <HelpCircle className="w-5 h-5" />

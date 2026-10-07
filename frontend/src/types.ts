@@ -4,7 +4,13 @@ export type MenuAccessLevel = "view" | "edit" | "both";
 
 export type AccessPermission = "E" | "V" | "NONE";
 
-export type StandardMenuKey = "menu_users" | "menu_acuan" | "menu_checklist" | "menu_master_ro" | "menu_rab_list";
+export type StandardMenuKey =
+  | "menu_users"
+  | "menu_acuan"
+  | "menu_checklist"
+  | "menu_master_ro"
+  | "menu_rab_list"
+  | "menu_verification";
 
 export type ActiveMenuKey =
   | StandardMenuKey
@@ -14,7 +20,7 @@ export type ActiveMenuKey =
   | "satker_list"
   | "satker_form"
   | "verifikator_checklist"
-  | "menu_master_ro"
+  | "verifikator_review"
   | "master_ro_list"
   | "master_ro_add";
 
@@ -22,9 +28,10 @@ export type ActiveMenuKey =
 export const ROLE_PERMISSIONS_MATRIX: Record<StandardMenuKey, Record<UserRole, AccessPermission>> = {
   menu_users: { superadmin: "E", verifikator: "NONE", satker: "NONE" },
   menu_acuan: { superadmin: "E", verifikator: "E", satker: "V" },
-  menu_checklist: { superadmin: "E", verifikator: "E", satker: "E" },
+  menu_checklist: { superadmin: "E", verifikator: "E", satker: "V" },
   menu_master_ro: { superadmin: "E", verifikator: "E", satker: "V" },
-  menu_rab_list: { superadmin: "E", verifikator: "V", satker: "E" },
+  menu_rab_list: { superadmin: "E", verifikator: "NONE", satker: "E" },
+  menu_verification: { superadmin: "NONE", verifikator: "E", satker: "NONE" },
 };
 
 export interface UserAccount {

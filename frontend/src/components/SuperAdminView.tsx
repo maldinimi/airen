@@ -660,7 +660,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                           -- Pilih Satuan Kerja / Unit Eselon --
                         </option>
                         {SATKER_UNIT_GROUPS.map((group) => (
-                          <optgroup key={group.group} label={group.group} className="font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-850">
+                          <optgroup key={group.group} label={group.group} className="font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800">
                             {group.options.map((unitName) => (
                               <option key={unitName} value={unitName} className="font-normal text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800">
                                 {unitName}
@@ -1335,7 +1335,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
             <div className="space-y-6 animate-fadeIn">
               {/* Main Upload Card (Bukan Pop-up) */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-                <div className="p-6 sm:p-7 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="p-6 sm:p-7 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className="p-2.5 rounded-xl bg-cyan-600 text-white shadow-md shadow-cyan-600/30">
                       {editingReg ? <Edit3 className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
@@ -1520,7 +1520,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                     </div>
 
                     {/* Active Toggle (Aktif / Tidak Aktif digunakan AI) */}
-                    <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3">
                       <input
                         id="page-reg-checkbox-active"
                         type="checkbox"
